@@ -329,6 +329,9 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                               // Trích xuất giá vé
                               final double price = _parsePrice(trip);
 
+                              // Trích xuất điểm đánh giá
+                              final double rating = double.tryParse((trip['rating'] ?? trip['avgRating'] ?? (trip['tripSchedule'] is Map ? trip['tripSchedule']['avgRating'] : null) ?? '4.5').toString()) ?? 4.5;
+
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 12.0),
                                 child: _buildOperatorCard(
@@ -348,6 +351,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                                   toStation: toLoc,
                                   price: price,
                                   vehicleType: vehicleName,
+                                  rating: rating,
                                 ),
                               );
                             },
@@ -372,6 +376,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     required String toStation,
     required double price,
     required String vehicleType,
+    required double rating,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -431,15 +436,46 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                operatorName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                  color: Color(0xFF1E1E1E),
-                                ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      operatorName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: Color(0xFF1E1E1E),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.star, size: 10, color: Colors.amber),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          rating.toStringAsFixed(1),
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.amber.shade900,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 4),
                               Row(
                                 children: [
                                   Container(
@@ -475,6 +511,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         // Distance Badge
                         if (distanceKm != null)
                           Container(
