@@ -65,7 +65,7 @@ class _HomePageState extends State<HomePage> {
 
       if (mounted) {
         setState(() {
-          _promotions = promoRes.data['promotions'] ?? promoRes.data['data'] ?? [];
+          _promotions = promoRes.data['items'] ?? promoRes.data['promotions'] ?? promoRes.data['data'] ?? [];
           _companies = companyRes.data['companies'] ?? companyRes.data['data'] ?? [];
         });
       }
