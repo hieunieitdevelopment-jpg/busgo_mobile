@@ -587,6 +587,7 @@ class _HomePageState extends State<HomePage> {
                         child: _buildOperatorListItem(
                           context,
                           name: companyName,
+                          logoUrl: company['logoUrl'],
                           rating: '4.8',
                           reviews: '320 đánh giá',
                           features: 'Wifi • Tivi • Sạc • Nước uống',
@@ -601,6 +602,7 @@ class _HomePageState extends State<HomePage> {
                     _buildOperatorListItem(
                       context,
                       name: 'Futa Bus Lines (Phương Trang)',
+                      logoUrl: null,
                       rating: '4.9',
                       reviews: '1,250 đánh giá',
                       features: 'Wifi • Tivi • Sạc • Nước uống',
@@ -610,6 +612,7 @@ class _HomePageState extends State<HomePage> {
                     _buildOperatorListItem(
                       context,
                       name: 'Đất Cảng Bus',
+                      logoUrl: null,
                       rating: '4.7',
                       reviews: '840 đánh giá',
                       features: 'Ghế da • Điều hòa • Nước uống',
@@ -619,6 +622,7 @@ class _HomePageState extends State<HomePage> {
                     _buildOperatorListItem(
                       context,
                       name: 'Sapa Express',
+                      logoUrl: null,
                       rating: '4.8',
                       reviews: '410 đánh giá',
                       features: 'Cabin Royal VIP • Cổng sạc Type-C',
@@ -1022,11 +1026,14 @@ class _HomePageState extends State<HomePage> {
   Widget _buildOperatorListItem(
     BuildContext context, {
     required String name,
+    required String? logoUrl,
     required String rating,
     required String reviews,
     required String features,
     required VoidCallback onTap,
   }) {
+    final bool hasLogo = logoUrl != null && logoUrl.isNotEmpty;
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1059,16 +1066,31 @@ class _HomePageState extends State<HomePage> {
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: const Color(0xff006e1c).withOpacity(0.08),
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade100),
                           ),
-                          child: const Icon(
-                            Icons.directions_bus_filled_outlined,
-                            color: Color(0xff006e1c),
-                            size: 22,
-                          ),
+                          child: hasLogo
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    logoUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.directions_bus_filled_outlined,
+                                      color: Color(0xff006e1c),
+                                      size: 22,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.directions_bus_filled_outlined,
+                                  color: Color(0xff006e1c),
+                                  size: 22,
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
