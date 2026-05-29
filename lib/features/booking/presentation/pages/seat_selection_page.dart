@@ -379,13 +379,26 @@ class _SeatSelectionPageState extends State<SeatSelectionPage> with SingleTicker
   }
 
   Widget _buildSeatGrid(BookingProvider bookingProvider, String deckPrefix) {
-    // Phân loại ghế theo tầng dựa trên ký tự bắt đầu của số ghế
+    // Phân loại ghế theo tầng dựa trên ký tự bắt đầu hoặc kết thúc của số ghế (A03/B03 hoặc 3A/3B)
     final List<dynamic> deckSeats = bookingProvider.seats.where((seat) {
-      final name = (seat['name'] ?? seat['seatNumber'] ?? seat['seat_number'] ?? '').toString().toUpperCase();
+      final name = (seat['name'] ?? seat['seatNumber'] ?? seat['seat_number'] ?? '').toString().toUpperCase().trim();
+      
+      // Kiểm tra nếu có trường floor hoặc deck trong API
+      final dynamic floor = seat['floor'] ?? seat['floorNumber'] ?? seat['floor_number'] ?? seat['deck'];
+      if (floor != null) {
+        final String fStr = floor.toString().toUpperCase();
+        if (deckPrefix == 'A') {
+          return fStr == '1' || fStr == 'A' || fStr.contains('DƯỚI') || fStr.contains('DUOI');
+        } else {
+          return fStr == '2' || fStr == 'B' || fStr.contains('TRÊN') || fStr.contains('TREN');
+        }
+      }
+
       if (deckPrefix == 'A') {
-        return name.startsWith('A') || (!name.startsWith('B') && !name.startsWith('C'));
+        return name.startsWith('A') || name.endsWith('A') || 
+               (!name.startsWith('B') && !name.endsWith('B') && !name.startsWith('C') && !name.endsWith('C'));
       } else {
-        return name.startsWith('B') || name.startsWith('C');
+        return name.startsWith('B') || name.endsWith('B') || name.startsWith('C') || name.endsWith('C');
       }
     }).toList();
 
