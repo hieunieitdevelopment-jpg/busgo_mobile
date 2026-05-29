@@ -21,13 +21,6 @@ class _RegisterPageState extends State<RegisterPage> {
   
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  String _selectedRole = 'Khách hàng';
-
-  final List<Map<String, dynamic>> _roles = [
-    {'name': 'Khách hàng', 'icon': Icons.person_outline, 'desc': 'Đặt vé và quản lý hành trình'},
-    {'name': 'Tài xế', 'icon': Icons.drive_eta_outlined, 'desc': 'Theo dõi chuyến và check-in'},
-    {'name': 'Công ty', 'icon': Icons.business_outlined, 'desc': 'Quản lý đội xe và nhân sự'},
-  ];
 
   @override
   void dispose() {
@@ -105,88 +98,6 @@ class _RegisterPageState extends State<RegisterPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. Web-aligned Left Column representation (Role panel)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              color: const Color(0xff004510),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Chọn vai trò để hệ thống mở các công cụ phù hợp:',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 64,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _roles.length,
-                      itemBuilder: (context, index) {
-                        final role = _roles[index];
-                        final isSelected = _selectedRole == role['name'];
-                        return GestureDetector(
-                          onTap: () {
-                            if (role['name'] != 'Khách hàng') {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Vai trò ${role['name']} cần đăng ký trên hệ thống web doanh nghiệp.')),
-                              );
-                              return;
-                            }
-                            setState(() => _selectedRole = role['name']);
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected ? Colors.white : Colors.white24,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  role['icon'],
-                                  color: isSelected ? const Color(0xff006e1c) : Colors.white,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      role['name'],
-                                      style: TextStyle(
-                                        color: isSelected ? const Color(0xff006e1c) : Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    Text(
-                                      role['desc'],
-                                      style: TextStyle(
-                                        color: isSelected ? Colors.grey[700] : Colors.white60,
-                                        fontSize: 9,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             // 2. High-fidelity Register Form Card (Matches Web Right Column)
             Padding(
               padding: const EdgeInsets.all(20.0),
