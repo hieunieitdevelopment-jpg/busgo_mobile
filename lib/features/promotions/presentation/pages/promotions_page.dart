@@ -1,11 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:busgo_mobile/core/api/public_service.dart';
 
-class PromotionsPage extends StatelessWidget {
+class PromotionsPage extends StatefulWidget {
   const PromotionsPage({super.key});
 
   @override
+  State<PromotionsPage> createState() => _PromotionsPageState();
+}
+
+class _PromotionsPageState extends State<PromotionsPage> {
+  final PublicService _publicService = PublicService();
+  List<dynamic> _promotions = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPromotions();
+  }
+
+  Future<void> _fetchPromotions() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final res = await _publicService.getPromotions(limit: 100);
+      final items = res.data['items'] ?? res.data['promotions'] ?? res.data['data'] ?? [];
+      
+      if (mounted) {
+        setState(() {
+          _promotions = items is List ? items : [];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Không thể tải danh sách khuyến mãi. Vui lòng thử lại sau.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatDate(dynamic dateStr) {
+    if (dateStr == null) return 'Không xác định';
+    try {
+      final date = DateTime.parse(dateStr.toString()).toLocal();
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return 'Không xác định';
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final stripeColors = [Colors.green, Colors.orange, Colors.blue, Colors.pink, Colors.purple];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mã giảm giá & Ưu đãi'),
@@ -14,82 +70,126 @@ class PromotionsPage extends StatelessWidget {
           onPressed: () => context.go('/'),
         ),
       ),
-      body: Column(
-        children: [
-          // Promo input card
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Nhập mã giảm giá...',
-                          filled: false,
+      body: RefreshIndicator(
+        onRefresh: _fetchPromotions,
+        child: Column(
+          children: [
+            // Promo input card
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Nhập mã giảm giá...',
+                            filled: false,
+                          ),
                         ),
                       ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {},
-                      child: const Text('Áp dụng'),
-                    ),
-                  ],
+                      ElevatedButton(
+                        onPressed: () {},
+                        child: const Text('Áp dụng'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // Filter scroll
-          SizedBox(
-            height: 36,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildCategoryPill('Tất cả', true),
-                _buildCategoryPill('Vé xe khách', false),
-                _buildCategoryPill('Thanh toán', false),
-                _buildCategoryPill('Mới nhất', false),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
+            // Promotions list area
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(),
+                    )
+                  : _errorMessage != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: _fetchPromotions,
+                                  child: const Text('Thử lại'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _promotions.isEmpty
+                          ? Center(
+                              child: SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 64),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Chưa có mã khuyến mãi nào',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Vui lòng quay lại sau để cập nhật các ưu đãi mới nhất.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: _promotions.length,
+                              itemBuilder: (context, index) {
+                                final promo = _promotions[index];
+                                final code = promo['code'] ?? 'BUSGO';
+                                final title = promo['title'] ?? 'Khuyến mãi hot';
+                                final desc = promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất';
+                                final endDateStr = promo['endDate'];
+                                final expiry = 'Hạn dùng: ${_formatDate(endDateStr)}';
+                                final Color stripeColor = stripeColors[index % stripeColors.length];
 
-          // Promotions list
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildVoucherCard(
-                  context,
-                  code: 'GIAM50K',
-                  title: 'Giảm ngay 50.000đ cho chuyến đầu tiên',
-                  expiry: 'Hạn dùng: 31/05/2026',
-                  stripeColor: Colors.green,
-                ),
-                const SizedBox(height: 12),
-                _buildVoucherCard(
-                  context,
-                  code: 'STRIPE20',
-                  title: 'Giảm 20% khi thanh toán qua thẻ Visa/Mastercard',
-                  expiry: 'Hạn dùng: 31/05/2026',
-                  stripeColor: Colors.orange,
-                ),
-                const SizedBox(height: 12),
-                _buildVoucherCard(
-                  context,
-                  code: 'SUMMER30',
-                  title: 'Đón hè rực rỡ - Giảm 30.000đ đi Sa Pa',
-                  expiry: 'Hạn dùng: 30/06/2026',
-                  stripeColor: Colors.grey,
-                ),
-              ],
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: _buildVoucherCard(
+                                    context,
+                                    code: code,
+                                    title: title,
+                                    desc: desc,
+                                    expiry: expiry,
+                                    stripeColor: stripeColor,
+                                  ),
+                                );
+                              },
+                            ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 2,
@@ -116,29 +216,11 @@ class PromotionsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCategoryPill(String title, bool isActive) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.green : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: isActive ? Colors.white : Colors.black87,
-          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
   Widget _buildVoucherCard(
     BuildContext context, {
     required String code,
     required String title,
+    required String desc,
     required String expiry,
     required Color stripeColor,
   }) {
@@ -166,34 +248,48 @@ class PromotionsPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        code,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.between,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            code,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy_outlined, color: Colors.green, size: 20),
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Đã sao chép mã $code!')),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        desc,
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(expiry, style: const TextStyle(color: Colors.grey, fontSize: 11)),
                   ],
                 ),
               ),
-            ),
-
-            // Copy button
-            IconButton(
-              icon: const Icon(Icons.copy_outlined, color: Colors.green),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Đã sao chép mã $code!')),
-                );
-              },
             ),
             const SizedBox(width: 8),
           ],

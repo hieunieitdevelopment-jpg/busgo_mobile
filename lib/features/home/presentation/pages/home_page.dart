@@ -539,34 +539,28 @@ class _HomePageState extends State<HomePage> {
                               );
                             },
                           )
-                        : ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: [
-                              _buildPromoCard(
-                                context,
-                                title: 'Flash Sale 30%',
-                                code: 'BUSGO30',
-                                desc: 'Giảm tối đa 50k toàn tuyến',
-                                color1: const Color(0xffff9800),
-                                color2: const Color(0xffe65100),
-                              ),
-                              _buildPromoCard(
-                                context,
-                                title: 'Tuyến Sapa Cực Hot',
-                                code: 'SAPAFREE',
-                                desc: 'Đồng giá cabin đơn 199k',
-                                color1: const Color(0xff2196f3),
-                                color2: const Color(0xff0d47a1),
-                              ),
-                              _buildPromoCard(
-                                context,
-                                title: 'Bạn Mới Trải Nghiệm',
-                                code: 'HELLOBUS',
-                                desc: 'Tặng ngay 50k chuyến đầu',
-                                color1: const Color(0xffe91e63),
-                                color2: const Color(0xff880e4f),
-                              ),
-                            ],
+                        : Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 32),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Chưa có mã khuyến mãi nào',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                   ),
                   const SizedBox(height: 28),
