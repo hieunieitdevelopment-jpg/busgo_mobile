@@ -50,6 +50,9 @@ class NotificationService {
 
   // PUT /auth/notification/:id/read: Đánh dấu đã đọc thông báo
   Future<Response> markNotificationRead(int id) async {
-    return await _apiClient.dio.put('/auth/notification/$id/read');
+    return await _apiClient.dio.put(
+      '/auth/notification/$id/read',
+      data: {},
+    );
   }
 }

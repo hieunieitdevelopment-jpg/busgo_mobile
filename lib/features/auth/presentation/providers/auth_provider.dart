@@ -17,6 +17,13 @@ class AuthProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _token != null;
 
+  /// Lấy ID người dùng hiện tại (hỗ trợ nhiều tên trường khác nhau từ backend).
+  int? get userId {
+    if (_user == null) return null;
+    final raw = _user!['id'] ?? _user!['userId'] ?? _user!['_id'];
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
   AuthProvider() {
     _loadPersistedData();
   }

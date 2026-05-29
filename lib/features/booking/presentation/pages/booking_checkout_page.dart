@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
 import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
+import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
+import 'package:busgo_mobile/features/notifications/presentation/providers/notification_provider.dart';
 
 class BookingCheckoutPage extends StatefulWidget {
   const BookingCheckoutPage({super.key});
@@ -53,6 +55,59 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
     });
   }
 
+  /// Resolve nhãn mã vé ĐỒNG BỘ với trang "Vé của tôi" (hiển thị dạng #<ticketId>).
+  /// Trang My Tickets dùng ticket['id'], không phải bookingId, nên cần resolve để khớp.
+  Future<String> _resolveTicketLabel() async {
+    if (!mounted) return '';
+    final bookingProvider =
+        Provider.of<BookingProvider>(context, listen: false);
+    final ticketProvider =
+        Provider.of<TicketProvider>(context, listen: false);
+    final dynamic lastBooking = bookingProvider.lastCreatedBooking;
+    if (lastBooking is! Map) return '';
+
+    // 1. Nếu response đặt vé đã chứa ticket id trực tiếp
+    final dynamic directTicketId =
+        lastBooking['ticket'] is Map ? lastBooking['ticket']['id'] : null;
+    if (directTicketId != null && directTicketId.toString().isNotEmpty) {
+      return '#$directTicketId';
+    }
+
+    // 2. Resolve qua bookingId -> tra cứu ticket thật để lấy đúng ticket id
+    final dynamic rawBookingId = lastBooking['bookingId'] ?? lastBooking['id'];
+    final int? bookingId = int.tryParse(rawBookingId?.toString() ?? '');
+    if (bookingId == null) return '';
+    try {
+      final ticket = await ticketProvider.findTicketByBookingId(bookingId);
+      if (ticket is Map && ticket['id'] != null) {
+        return '#${ticket['id']}';
+      }
+    } catch (_) {
+      // bỏ qua, dùng fallback bên dưới
+    }
+    return '#$bookingId';
+  }
+
+  /// Tạo thông báo cho người dùng (đặt vé / thanh toán). An toàn nếu chưa đăng nhập.
+  Future<void> _createUserNotification({
+    required String title,
+    required String body,
+    String? data,
+  }) async {
+    if (!mounted) return;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final notiProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+    final int? uid = authProvider.userId;
+    if (uid == null) return;
+    await notiProvider.pushUserNotification(
+      userId: uid,
+      title: title,
+      body: body,
+      data: data,
+    );
+  }
+
   void _showPaymentProcessingDialog({
     required BuildContext context,
     required int bookingId,
@@ -93,6 +148,14 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                     checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận. Đang chuyển hướng...';
                   });
                 }
+
+                // Thông báo: Thanh toán thành công (thanh toán trực tuyến)
+                await _createUserNotification(
+                  title: 'Thanh toán thành công',
+                  body:
+                      'Thanh toán thành công! Vé của bạn đã được xác nhận.',
+                  data: 'payment-success',
+                );
 
                 await Future.delayed(const Duration(seconds: 2));
                 if (context.mounted) {
@@ -228,6 +291,14 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                   statusState = 'success';
                                   checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận. Đang chuyển hướng...';
                                 });
+
+                                // Thông báo: Thanh toán thành công (kiểm tra thủ công)
+                                await _createUserNotification(
+                                  title: 'Thanh toán thành công',
+                                  body:
+                                      'Thanh toán thành công! Vé của bạn đã được xác nhận.',
+                                  data: 'payment-success',
+                                );
 
                                 await Future.delayed(const Duration(seconds: 2));
                                 if (context.mounted) {
@@ -768,6 +839,18 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                               );
 
                               if (success && mounted) {
+                                // Thông báo: Đặt vé thành công (đã giữ chỗ)
+                                final String ticketLabel =
+                                    await _resolveTicketLabel();
+                                if (!mounted) return;
+                                await _createUserNotification(
+                                  title: 'Đặt vé thành công',
+                                  body:
+                                      'Đặt vé thành công. Mã vé: $ticketLabel. Vui lòng hoàn tất thanh toán để xác nhận chuyến đi.',
+                                  data: 'booking-success',
+                                );
+
+                                if (!mounted) return;
                                 if (checkoutMethod == 'vnpay' || checkoutMethod == 'stripe') {
                                   final String? payUrl = bookingProvider.paymentUrl;
                                   if (payUrl != null && payUrl.isNotEmpty) {
@@ -830,6 +913,14 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                     context.push('/my-tickets');
                                   }
                                 } else {
+                                  // Thanh toán tiền mặt: vé GIỮ CHỖ, thu tiền tại quầy/khi lên xe (vẫn ở trạng thái chờ thanh toán)
+                                  await _createUserNotification(
+                                    title: 'Đặt vé tiền mặt thành công',
+                                    body:
+                                        'Vé của bạn đã được giữ chỗ. Vui lòng thanh toán tiền mặt tại quầy hoặc khi lên xe để hoàn tất.',
+                                    data: 'cash-reserved',
+                                  );
+                                  if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('Đặt vé thành công!'),
@@ -839,6 +930,13 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                   context.push('/boarding-pass');
                                 }
                               } else {
+                                // Thông báo: Giao dịch thất bại
+                                await _createUserNotification(
+                                  title: 'Giao dịch thất bại',
+                                  body:
+                                      'Giao dịch chưa hoàn tất. Vui lòng kiểm tra lại thông tin và thử lại.',
+                                  data: 'payment-failed',
+                                );
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
