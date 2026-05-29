@@ -14,15 +14,29 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   String _selectedSort = 'Giờ chạy sớm';
 
   double _parsePrice(dynamic trip) {
-    if (trip == null) return 250000.0;
-    final dynamic rawPrice = trip['price'] ?? 
-                             trip['ticketPrice'] ?? 
-                             trip['ticket_price'] ?? 
-                             trip['fare'] ??
-                             (trip['tripSchedule'] is Map ? trip['tripSchedule']['price'] : null);
-    if (rawPrice == null) return 250000.0;
+    if (trip == null) return 300000.0;
+    
+    dynamic rawPrice = trip['price'] ?? 
+                       trip['ticketPrice'] ?? 
+                       trip['ticket_price'] ?? 
+                       trip['fare'] ??
+                       trip['pricePerSeat'] ??
+                       trip['price_per_seat'];
+                       
+    if (rawPrice == null && trip['tripSchedule'] is Map) {
+      final sMap = trip['tripSchedule'] as Map;
+      rawPrice = sMap['price'] ?? 
+                 sMap['ticketPrice'] ?? 
+                 sMap['ticket_price'] ?? 
+                 sMap['fare'] ??
+                 sMap['pricePerSeat'] ??
+                 sMap['price_per_seat'];
+    }
+    
+    if (rawPrice == null) return 300000.0;
+    if (rawPrice is num) return rawPrice.toDouble();
     final String cleanPriceStr = rawPrice.toString().replaceAll(RegExp(r'[^\d]'), '');
-    return double.tryParse(cleanPriceStr) ?? 250000.0;
+    return double.tryParse(cleanPriceStr) ?? 300000.0;
   }
 
   String _formatCurrency(double amount) {

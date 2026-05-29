@@ -7,10 +7,24 @@ class BookingProvider extends ChangeNotifier {
 
   double _parsePrice(dynamic schedule) {
     if (schedule == null) return 0.0;
-    final dynamic raw = schedule['price'] ?? 
-                        schedule['ticketPrice'] ?? 
-                        schedule['ticket_price'] ?? 
-                        schedule['fare'];
+    
+    dynamic raw = schedule['price'] ?? 
+                  schedule['ticketPrice'] ?? 
+                  schedule['ticket_price'] ?? 
+                  schedule['fare'] ??
+                  schedule['pricePerSeat'] ??
+                  schedule['price_per_seat'];
+                  
+    if (raw == null && schedule['tripSchedule'] is Map) {
+      final sMap = schedule['tripSchedule'] as Map;
+      raw = sMap['price'] ?? 
+            sMap['ticketPrice'] ?? 
+            sMap['ticket_price'] ?? 
+            sMap['fare'] ??
+            sMap['pricePerSeat'] ??
+            sMap['price_per_seat'];
+    }
+    
     if (raw == null) return 0.0;
     if (raw is num) return raw.toDouble();
     final String clean = raw.toString().replaceAll(RegExp('[^0-9]'), '');
