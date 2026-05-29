@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
+import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
 
 class BoardingPassPage extends StatelessWidget {
   const BoardingPassPage({super.key});
@@ -9,40 +10,47 @@ class BoardingPassPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bookingProvider = Provider.of<BookingProvider>(context);
+    final ticketProvider = Provider.of<TicketProvider>(context);
+
+    // Ưu tiên thông tin chi tiết vé được chọn từ Lịch sử vé, nếu không có mới dùng Booking vừa tạo
+    final dynamic realTicket = ticketProvider.selectedTicket ?? bookingProvider.lastCreatedBooking;
     final schedule = bookingProvider.selectedSchedule;
-    final lastBooking = bookingProvider.lastCreatedBooking;
 
-    final String fromTo = bookingProvider.currentFrom.isNotEmpty && bookingProvider.currentTo.isNotEmpty
-        ? '${bookingProvider.currentFrom} ➔ ${bookingProvider.currentTo}'
-        : 'Hành trình của bạn';
+    final String fromTo = realTicket != null && realTicket['fromLocation'] != null && realTicket['toLocation'] != null
+        ? '${realTicket['fromLocation']} ➔ ${realTicket['toLocation']}'
+        : (bookingProvider.currentFrom.isNotEmpty && bookingProvider.currentTo.isNotEmpty
+            ? '${bookingProvider.currentFrom} ➔ ${bookingProvider.currentTo}'
+            : 'Hành trình của bạn');
 
-    final String travelDate = bookingProvider.currentDate.isNotEmpty
-        ? bookingProvider.currentDate
-        : 'Hôm nay';
+    final String travelDate = realTicket != null && realTicket['departureDate'] != null
+        ? realTicket['departureDate'].toString()
+        : (bookingProvider.currentDate.isNotEmpty ? bookingProvider.currentDate : 'Hôm nay');
 
-    final String departureTime = bookingProvider.selectedPickup != null
-        ? bookingProvider.selectedPickup['time'] ?? '08:00 AM'
-        : '08:00 AM';
+    final String departureTime = realTicket != null && realTicket['departureTime'] != null
+        ? realTicket['departureTime'].toString()
+        : (bookingProvider.selectedPickup != null ? bookingProvider.selectedPickup['time'] ?? '08:00 AM' : '08:00 AM');
 
-    final String arrivalTime = bookingProvider.selectedDropoff != null
-        ? bookingProvider.selectedDropoff['time'] ?? '02:30 PM'
-        : '02:30 PM';
+    final String arrivalTime = realTicket != null && realTicket['arrivalTime'] != null
+        ? realTicket['arrivalTime'].toString()
+        : (bookingProvider.selectedDropoff != null ? bookingProvider.selectedDropoff['time'] ?? '02:30 PM' : '02:30 PM');
 
-    final String seatsSelected = bookingProvider.selectedSeatNumbers.isNotEmpty
-        ? bookingProvider.selectedSeatNumbers.join(', ')
-        : 'Chưa chọn';
+    final String seatsSelected = realTicket != null && (realTicket['seatNumber'] != null || realTicket['seatNumbers'] != null)
+        ? (realTicket['seatNumber'] ?? realTicket['seatNumbers']).toString()
+        : (bookingProvider.selectedSeatNumbers.isNotEmpty ? bookingProvider.selectedSeatNumbers.join(', ') : 'Chưa chọn');
 
     final compObj = schedule != null ? (schedule['company'] ?? (schedule['tripSchedule'] is Map ? schedule['tripSchedule']['company'] : null)) : null;
-    final String operatorName = schedule != null
-        ? (schedule['name'] ?? 
-           schedule['companyName'] ?? 
-           schedule['company_name'] ?? 
-           (schedule['tripSchedule'] is Map ? schedule['tripSchedule']['companyName'] ?? schedule['tripSchedule']['company_name'] : null) ?? 
-           (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : null) ?? 
-           'Futa Bus Lines')
-        : 'Đối tác BusGo';
+    final String operatorName = realTicket != null && (realTicket['companyName'] ?? realTicket['operatorName']) != null
+        ? (realTicket['companyName'] ?? realTicket['operatorName']).toString()
+        : (schedule != null
+            ? (schedule['name'] ?? 
+               schedule['companyName'] ?? 
+               schedule['company_name'] ?? 
+               (schedule['tripSchedule'] is Map ? schedule['tripSchedule']['companyName'] ?? schedule['tripSchedule']['company_name'] : null) ?? 
+               (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : null) ?? 
+               'Futa Bus Lines')
+            : 'Đối tác BusGo');
 
-    final int bookingId = int.tryParse((lastBooking != null ? lastBooking['id'] ?? lastBooking['bookingId'] ?? '108249' : '108249').toString()) ?? 108249;
+    final int bookingId = int.tryParse((realTicket != null ? realTicket['id'] ?? realTicket['bookingId'] ?? '108249' : '108249').toString()) ?? 108249;
 
     return Scaffold(
       backgroundColor: const Color(0xff121212), // High-End Dark Frame
@@ -61,8 +69,14 @@ class BoardingPassPage extends StatelessWidget {
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () {
-            bookingProvider.clearSelectionAfterBooking();
-            context.go('/');
+            if (ticketProvider.selectedTicket != null) {
+              // Quay lại lịch sử vé và refresh danh sách
+              ticketProvider.fetchMyTickets();
+              context.go('/my-tickets');
+            } else {
+              bookingProvider.clearSelectionAfterBooking();
+              context.go('/');
+            }
           },
         ),
       ),

@@ -559,6 +559,9 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                       ),
                                     );
                                   }
+                                  // Đồng bộ 100% với React Web: Dọn dẹp trạng thái đặt vé và chuyển sang màn hình "Vé của tôi"
+                                  bookingProvider.clearSelectionAfterBooking();
+                                  context.push('/my-tickets');
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -566,8 +569,8 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                       backgroundColor: Color(0xff006e1c),
                                     ),
                                   );
+                                  context.push('/boarding-pass');
                                 }
-                                context.push('/boarding-pass');
                               } else {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
