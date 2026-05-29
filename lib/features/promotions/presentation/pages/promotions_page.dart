@@ -167,9 +167,9 @@ class _PromotionsPageState extends State<PromotionsPage> {
                               itemCount: _promotions.length,
                               itemBuilder: (context, index) {
                                 final promo = _promotions[index];
-                                final code = promo['code'] ?? 'BUSGO';
+                                final code = promo['code'] ?? 'BGO${promo['id'] ?? (index + 1)}';
                                 final title = promo['title'] ?? 'Khuyến mãi hot';
-                                final desc = promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất';
+                                final desc = promo['content'] ?? promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất';
                                 final endDateStr = promo['endDate'];
                                 final expiry = 'Hạn dùng: ${_formatDate(endDateStr)}';
                                 final Color stripeColor = stripeColors[index % stripeColors.length];
@@ -183,6 +183,7 @@ class _PromotionsPageState extends State<PromotionsPage> {
                                     desc: desc,
                                     expiry: expiry,
                                     stripeColor: stripeColor,
+                                    onTap: () => context.push('/promotion-detail', extra: promo),
                                   ),
                                 );
                               },
@@ -223,9 +224,12 @@ class _PromotionsPageState extends State<PromotionsPage> {
     required String desc,
     required String expiry,
     required Color stripeColor,
+    required VoidCallback onTap,
   }) {
-    return Card(
-      child: IntrinsicHeight(
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        child: IntrinsicHeight(
         child: Row(
           children: [
             // Left stripe color bar
@@ -295,6 +299,6 @@ class _PromotionsPageState extends State<PromotionsPage> {
           ],
         ),
       ),
-    );
+    ),);
   }
 }

@@ -7,6 +7,7 @@ import 'package:busgo_mobile/features/booking/presentation/pages/booking_checkou
 import 'package:busgo_mobile/features/ticket/presentation/pages/boarding_pass_page.dart';
 import 'package:busgo_mobile/features/ticket/presentation/pages/my_tickets_page.dart';
 import 'package:busgo_mobile/features/promotions/presentation/pages/promotions_page.dart';
+import 'package:busgo_mobile/features/promotions/presentation/pages/promotion_detail_page.dart';
 import 'package:busgo_mobile/features/profile/presentation/pages/profile_page.dart';
 import 'package:busgo_mobile/features/auth/presentation/pages/login_page.dart';
 import 'package:busgo_mobile/features/auth/presentation/pages/register_page.dart';
@@ -57,6 +58,15 @@ class AppRoutes {
       GoRoute(
         path: '/promotions',
         builder: (context, state) => const PromotionsPage(),
+      ),
+
+      // 7b. Promotion Detail
+      GoRoute(
+        path: '/promotion-detail',
+        builder: (context, state) {
+          final promo = state.extra as Map<String, dynamic>;
+          return PromotionDetailPage(promotion: promo);
+        },
       ),
 
       // 8. User Profile Edit

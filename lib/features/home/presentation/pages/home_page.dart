@@ -543,6 +543,7 @@ class _HomePageState extends State<HomePage> {
                                 endDate: endDate,
                                 color1: index % 2 == 0 ? const Color(0xffff9800) : const Color(0xff2196f3),
                                 color2: index % 2 == 0 ? const Color(0xffe65100) : const Color(0xff0d47a1),
+                                onTap: () => context.push('/promotion-detail', extra: promo),
                               );
                             },
                           )
@@ -842,12 +843,15 @@ class _HomePageState extends State<HomePage> {
     required String? endDate,
     required Color color1,
     required Color color2,
+    required VoidCallback onTap,
   }) {
     final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
     
-    return Container(
-      width: 260,
-      margin: const EdgeInsets.only(right: 12),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 260,
+        margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         image: hasImage
@@ -1012,7 +1016,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
+    ),);
   }
 
   Widget _buildOperatorListItem(
