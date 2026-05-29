@@ -11,6 +11,7 @@ import 'package:busgo_mobile/features/promotions/presentation/pages/promotion_de
 import 'package:busgo_mobile/features/profile/presentation/pages/profile_page.dart';
 import 'package:busgo_mobile/features/auth/presentation/pages/login_page.dart';
 import 'package:busgo_mobile/features/auth/presentation/pages/register_page.dart';
+import 'package:busgo_mobile/features/notifications/presentation/pages/notifications_page.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -85,6 +86,12 @@ class AppRoutes {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterPage(),
+      ),
+
+      // 11. Notifications List
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsPage(),
       ),
     ],
   );

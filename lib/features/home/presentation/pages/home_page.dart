@@ -5,6 +5,7 @@ import 'package:busgo_mobile/core/api/public_service.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
 import 'package:busgo_mobile/features/booking/data/booking_service.dart';
 import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
+import 'package:busgo_mobile/core/api/notification_service.dart';
 
 // Đồng bộ 100% danh sách Tỉnh/Thành phố từ Web (VIETNAM_PROVINCES)
 const List<String> _vietnamProvinces = [
@@ -29,11 +30,13 @@ class _HomePageState extends State<HomePage> {
   late final TextEditingController _dateController;
 
   final PublicService _publicService = PublicService();
+  final NotificationService _notificationService = NotificationService();
   List<dynamic> _promotions = [];
   List<dynamic> _companies = [];
   List<dynamic> _popularRoutes = [];
   bool _isLoadingData = false;
   String? _lastToken;
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -53,6 +56,34 @@ class _HomePageState extends State<HomePage> {
     if (authProvider.token != _lastToken) {
       _lastToken = authProvider.token;
       _fetchPublicData();
+      _fetchUnreadNotificationCount();
+    }
+  }
+
+  Future<void> _fetchUnreadNotificationCount() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.token != null && authProvider.token!.isNotEmpty) {
+      try {
+        final response = await _notificationService.getNotifications(limit: 100);
+        final data = response.data;
+        if (data != null) {
+          final List<dynamic> list = data['notifications'] ?? [];
+          final count = list.where((n) => n['isRead'] == false || n['isRead'] == 0).length;
+          if (mounted) {
+            setState(() {
+              _unreadCount = count;
+            });
+          }
+        }
+      } catch (_) {
+        // Safe fail
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _unreadCount = 0;
+        });
+      }
     }
   }
 
@@ -162,6 +193,7 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         setState(() => _isLoadingData = false);
       }
+      _fetchUnreadNotificationCount();
     }
   }
 
@@ -330,15 +362,47 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                       ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.notifications_none_outlined, color: Colors.white),
-                          onPressed: () {},
-                        ),
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.notifications_none_outlined, color: Colors.white),
+                              onPressed: () {
+                                context.push('/notifications').then((_) => _fetchUnreadNotificationCount());
+                              },
+                            ),
+                          ),
+                          if (_unreadCount > 0)
+                            Positioned(
+                              top: -2,
+                              right: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 16,
+                                  minHeight: 16,
+                                ),
+                                child: Text(
+                                  _unreadCount > 99 ? '99+' : '$_unreadCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
