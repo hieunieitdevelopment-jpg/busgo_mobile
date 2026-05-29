@@ -529,11 +529,18 @@ class _HomePageState extends State<HomePage> {
                             itemCount: _promotions.length,
                             itemBuilder: (context, index) {
                               final promo = _promotions[index];
+                              final String title = promo['title'] ?? 'Khuyến mãi hot';
+                              final String desc = promo['content'] ?? promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất';
+                              final String code = promo['code'] ?? 'BGO${promo['id'] ?? (index + 1)}';
+                              final String? imageUrl = promo['imageUrl'];
+                              final String? endDate = promo['endDate'];
                               return _buildPromoCard(
                                 context,
-                                title: promo['title'] ?? 'Khuyến mãi hot',
-                                code: promo['code'] ?? 'BUSGO',
-                                desc: promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất',
+                                title: title,
+                                code: code,
+                                desc: desc,
+                                imageUrl: imageUrl,
+                                endDate: endDate,
                                 color1: index % 2 == 0 ? const Color(0xffff9800) : const Color(0xff2196f3),
                                 color2: index % 2 == 0 ? const Color(0xffe65100) : const Color(0xff0d47a1),
                               );
@@ -831,22 +838,38 @@ class _HomePageState extends State<HomePage> {
     required String title,
     required String code,
     required String desc,
+    required String? imageUrl,
+    required String? endDate,
     required Color color1,
     required Color color2,
   }) {
+    final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    
     return Container(
-      width: 250,
+      width: 260,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color1, color2],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
         borderRadius: BorderRadius.circular(16),
+        image: hasImage
+            ? DecorationImage(
+                image: NetworkImage(imageUrl),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.55),
+                  BlendMode.srcOver,
+                ),
+              )
+            : null,
+        gradient: hasImage
+            ? null
+            : LinearGradient(
+                colors: [color1, color2],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
         boxShadow: [
           BoxShadow(
-            color: color2.withOpacity(0.3),
+            color: (hasImage ? Colors.black26 : color2.withOpacity(0.3)),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -854,6 +877,22 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Stack(
         children: [
+          // Lớp phủ tối mịn ở dưới chữ
+          if (hasImage)
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.black.withOpacity(0.7),
+                    Colors.black.withOpacity(0.1),
+                  ],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                ),
+              ),
+            ),
+          
           // Semi-circle cutout patterns on left/right for ticket style
           Positioned(
             left: -8,
@@ -880,7 +919,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -894,8 +933,8 @@ class _HomePageState extends State<HomePage> {
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          letterSpacing: 0.5,
+                          fontSize: 13,
+                          letterSpacing: 0.3,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -905,7 +944,7 @@ class _HomePageState extends State<HomePage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withOpacity(0.25),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.white30),
                       ),
@@ -922,11 +961,11 @@ class _HomePageState extends State<HomePage> {
                 ),
                 // Dashed separator line
                 Container(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  margin: const EdgeInsets.symmetric(vertical: 4),
                   height: 1,
                   child: Row(
                     children: List.generate(
-                      14,
+                      16,
                       (index) => Expanded(
                         child: Container(
                           color: index % 2 == 0 ? Colors.transparent : Colors.white30,
@@ -936,15 +975,37 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 ),
-                Text(
-                  desc,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      desc,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (endDate != null && endDate.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, color: Colors.white70, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Hạn dùng: $endDate',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
