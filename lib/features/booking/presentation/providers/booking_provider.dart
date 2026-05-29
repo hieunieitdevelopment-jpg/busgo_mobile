@@ -572,4 +572,55 @@ class BookingProvider extends ChangeNotifier {
     _paymentUrl = null;
     notifyListeners();
   }
+
+  // Thanh toán cho một Booking/Vé đã có sẵn ở trạng thái Chờ thanh toán
+  Future<String?> payExistingBooking({
+    required int bookingId,
+    required String method,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final String apiMethod = method.toLowerCase();
+      print('Bắt đầu gọi API thanh toán lại: method=$apiMethod, bookingId=$bookingId');
+      
+      final paymentResponse = await _bookingService.createPaymentMethod(
+        bookingId: bookingId,
+        method: apiMethod,
+      );
+
+      print('=== ĐĂNG KÝ PHƯƠNG THỨC THANH TOÁN THÀNH CÔNG ===');
+      print(paymentResponse.data);
+
+      String? paymentUrl;
+      final dynamic payData = paymentResponse.data;
+      if (payData != null) {
+        if (payData is Map) {
+          paymentUrl = payData['paymentUrl'] ?? 
+                       payData['url'] ?? 
+                       (payData['data'] is Map ? payData['data']['paymentUrl'] ?? payData['data']['url'] : null);
+        } else if (payData is String) {
+          paymentUrl = payData;
+        }
+      }
+      
+      _isLoading = false;
+      notifyListeners();
+      return paymentUrl;
+    } catch (e) {
+      if (e is DioException) {
+        final resData = e.response?.data;
+        _errorMessage = 'Lỗi [${e.response?.statusCode}]: ${resData is Map ? (resData['message'] ?? resData['error'] ?? resData.toString()) : (resData ?? e.message)}';
+      } else {
+        _errorMessage = e.toString().replaceAll('DioException: ', '');
+      }
+      print('=== PAY EXISTING ERROR ===: $_errorMessage');
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    return null;
+  }
 }

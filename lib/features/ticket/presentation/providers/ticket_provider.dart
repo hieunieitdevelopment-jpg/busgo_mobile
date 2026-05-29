@@ -15,6 +15,8 @@ class TicketProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   // Lấy danh sách lịch sử vé của khách hàng
+  // Sau khi lấy danh sách rút gọn, tự động fetch chi tiết song song
+  // để merge các trường: fromLocation, toLocation, seatNumber, departureTime, plateNumber, companyName
   Future<void> fetchMyTickets({String? status, String? type}) async {
     _isLoading = true;
     _errorMessage = null;
@@ -24,7 +26,43 @@ class TicketProvider extends ChangeNotifier {
       final response = await _ticketService.getTickets(status: status, type: type);
       final data = response.data;
       if (data != null && data['tickets'] != null) {
-        _tickets = data['tickets'];
+        final List<dynamic> basicTickets = List<dynamic>.from(data['tickets']);
+
+        // Fetch chi tiết song song cho từng vé để lấy fromLocation, toLocation, seatNumber...
+        final detailFutures = basicTickets.map((ticket) async {
+          final ticketId = int.tryParse(ticket['id']?.toString() ?? '');
+          if (ticketId == null || ticketId == 0) return ticket;
+
+          try {
+            final detailResponse = await _ticketService.getTicketDetail(ticketId);
+            final detailData = detailResponse.data;
+            if (detailData != null) {
+              final innerData = detailData['data'] ?? detailData;
+              final detailTicket = innerData['ticket'] ?? innerData;
+
+              // Merge các trường chi tiết vào vé rút gọn (không ghi đè nếu đã có)
+              if (detailTicket is Map) {
+                final enrichedTicket = Map<String, dynamic>.from(ticket);
+                final fieldsToMerge = [
+                  'fromLocation', 'toLocation', 'departureTime',
+                  'seatNumber', 'plateNumber', 'type', 'code',
+                  'companyName', 'operatorName',
+                ];
+                for (final field in fieldsToMerge) {
+                  if (detailTicket[field] != null && (enrichedTicket[field] == null || enrichedTicket[field].toString().isEmpty)) {
+                    enrichedTicket[field] = detailTicket[field];
+                  }
+                }
+                return enrichedTicket;
+              }
+            }
+          } catch (e) {
+            print('=== Enrichment failed for ticket $ticketId: $e ===');
+          }
+          return ticket;
+        }).toList();
+
+        _tickets = await Future.wait(detailFutures);
       }
     } catch (e) {
       _errorMessage = e.toString().replaceAll('DioException: ', '');
@@ -44,8 +82,9 @@ class TicketProvider extends ChangeNotifier {
     try {
       final response = await _ticketService.getTicketDetail(ticketId);
       final data = response.data;
-      if (data != null && data['ticket'] != null) {
-        _selectedTicket = data['ticket'];
+      if (data != null) {
+        final innerData = data['data'] ?? data;
+        _selectedTicket = innerData['ticket'] ?? innerData;
       }
     } catch (e) {
       _errorMessage = e.toString().replaceAll('DioException: ', '');
@@ -53,6 +92,27 @@ class TicketProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  // Tìm kiếm vé theo bookingId trong danh sách vé của user (Tránh lỗi HTTP 500 khi gọi chi tiết sai ID)
+  Future<dynamic> findTicketByBookingId(int bookingId) async {
+    try {
+      final response = await _ticketService.getTickets(limit: 50);
+      final data = response.data;
+      if (data != null && data['tickets'] != null) {
+        final List<dynamic> ticketsList = data['tickets'];
+        for (final t in ticketsList) {
+          final tBookingId = int.tryParse(t['bookingId']?.toString() ?? '');
+          final tId = int.tryParse(t['id']?.toString() ?? '');
+          if (tBookingId == bookingId || tId == bookingId) {
+            return t;
+          }
+        }
+      }
+    } catch (e) {
+      print('=== findTicketByBookingId Error: $e ===');
+    }
+    return null;
   }
 
   // Thực hiện yêu cầu hủy vé

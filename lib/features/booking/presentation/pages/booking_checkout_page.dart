@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
+import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
 
 class BookingCheckoutPage extends StatefulWidget {
   const BookingCheckoutPage({super.key});
@@ -50,6 +51,242 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
         _timer?.cancel();
       }
     });
+  }
+
+  void _showPaymentProcessingDialog({
+    required BuildContext context,
+    required int bookingId,
+    required BookingProvider bookingProvider,
+    required TicketProvider ticketProvider,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        String statusState = 'waiting'; // 'waiting', 'checking', 'success', 'fail'
+        String checkMessage = 'Hệ thống đang chờ xác nhận thanh toán trực tuyến của bạn từ VNPAY / Stripe.\n\nSau khi bạn hoàn tất thanh toán trên tab trình duyệt vừa mở, hãy nhấn nút "Kiểm tra giao dịch" ở dưới.';
+        Timer? pollTimer;
+
+        // Cơ cơ chế tự động truy vấn mỗi 3 giây
+        void startPolling(StateSetter setState) {
+          pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+            if (statusState == 'success' || statusState == 'checking') return;
+
+            try {
+              print('=== POLLING TICKET ID: $bookingId ===');
+              final ticket = await ticketProvider.findTicketByBookingId(bookingId);
+              print('=== POLLING TICKET DATA: $ticket ===');
+              final status = ticket != null ? ticket['status']?.toString() : null;
+              final statusLower = status?.toLowerCase();
+              print('=== POLLING TICKET STATUS RESOLVED: $statusLower ===');
+
+              if (statusLower == 'reserved' || 
+                  statusLower == 'completed' || 
+                  statusLower == 'paid' || 
+                  statusLower == 'checked_in' || 
+                  statusLower == 'cash_paid') {
+                print('=== POLLING MATCHED SUCCESS STATE! CANCELING TIMER AND REDIRECTING ===');
+                timer.cancel();
+                if (dialogContext.mounted) {
+                  setState(() {
+                    statusState = 'success';
+                    checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận. Đang chuyển hướng...';
+                  });
+                }
+
+                await Future.delayed(const Duration(seconds: 2));
+                if (context.mounted) {
+                  pollTimer?.cancel();
+                  Navigator.pop(dialogContext);
+                  bookingProvider.clearSelectionAfterBooking();
+                  context.push('/boarding-pass');
+                }
+              }
+            } catch (e) {
+              print('=== POLLING ERROR: $e ===');
+            }
+          });
+        }
+
+        return StatefulBuilder(
+          builder: (dialogContext, setState) {
+            // Kích hoạt tự động truy vấn ở lần dựng đầu tiên
+            if (pollTimer == null) {
+              startPolling(setState);
+            }
+
+            return Dialog(
+              backgroundColor: const Color(0xff121212),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: const BorderSide(color: Colors.white10),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (statusState == 'waiting') ...[
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xff006e1c)),
+                              strokeWidth: 4,
+                            ),
+                          ),
+                          Icon(Icons.payment_outlined, size: 36, color: Colors.green.shade400),
+                        ],
+                      ),
+                    ] else if (statusState == 'checking') ...[
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                              strokeWidth: 4,
+                            ),
+                          ),
+                          Icon(Icons.sync, size: 36, color: Colors.amber.shade400),
+                        ],
+                      ),
+                    ] else if (statusState == 'success') ...[
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: const Color(0xff006e1c).withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check_circle, size: 56, color: Color(0xff006e1c)),
+                      ),
+                    ] else ...[
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.error, size: 56, color: Colors.red),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Text(
+                      statusState == 'waiting'
+                          ? 'Đang chờ thanh toán...'
+                          : (statusState == 'checking'
+                              ? 'Đang kiểm tra...'
+                              : (statusState == 'success'
+                                  ? 'Thanh Toán Thành Công!'
+                                  : 'Giao Dịch Chưa Hoàn Tất')),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: statusState == 'success'
+                            ? Colors.green
+                            : (statusState == 'fail' ? Colors.red : Colors.white),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      checkMessage,
+                      style: const TextStyle(color: Colors.grey, fontSize: 13, height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    if (statusState == 'waiting' || statusState == 'fail') ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            setState(() {
+                              statusState = 'checking';
+                              checkMessage = 'Đang truy vấn trạng thái thanh toán từ hệ thống. Vui lòng chờ...';
+                            });
+
+                            try {
+                              final ticket = await ticketProvider.findTicketByBookingId(bookingId);
+                              final status = ticket != null ? ticket['status']?.toString() : null;
+                              final statusLower = status?.toLowerCase();
+
+                              if (statusLower == 'reserved' || 
+                                  statusLower == 'completed' || 
+                                  statusLower == 'paid' || 
+                                  statusLower == 'checked_in' || 
+                                  statusLower == 'cash_paid') {
+                                pollTimer?.cancel();
+                                setState(() {
+                                  statusState = 'success';
+                                  checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận. Đang chuyển hướng...';
+                                });
+
+                                await Future.delayed(const Duration(seconds: 2));
+                                if (context.mounted) {
+                                  Navigator.pop(dialogContext);
+                                  bookingProvider.clearSelectionAfterBooking();
+                                  context.push('/boarding-pass');
+                                }
+                              } else {
+                                setState(() {
+                                  statusState = 'fail';
+                                  checkMessage = 'Giao dịch chưa hoàn tất hoặc đang được xử lý (Trạng thái: ${status ?? 'chưa xác định'}).\n\nVui lòng thử lại sau vài giây hoặc kiểm tra tab thanh toán.';
+                                });
+                              }
+                            } catch (e) {
+                              setState(() {
+                                statusState = 'fail';
+                                checkMessage = 'Lỗi truy vấn trạng thái: $e';
+                              });
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xff006e1c),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Kiểm tra giao dịch', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (statusState == 'checking') const SizedBox(height: 60),
+                    if (statusState != 'success' && statusState != 'checking') ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            pollTimer?.cancel();
+                            Navigator.pop(dialogContext);
+                            bookingProvider.clearSelectionAfterBooking();
+                            context.push('/my-tickets');
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white70,
+                            side: const BorderSide(color: Colors.white24),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Xem Lịch sử vé'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -542,7 +779,14 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                           backgroundColor: Color(0xff006e1c),
                                         ),
                                       );
-                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.inAppWebView,
+                                        webViewConfiguration: const WebViewConfiguration(
+                                          enableJavaScript: true,
+                                          enableDomStorage: true,
+                                        ),
+                                      );
                                     } catch (e) {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
@@ -559,9 +803,32 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                       ),
                                     );
                                   }
-                                  // Đồng bộ 100% với React Web: Dọn dẹp trạng thái đặt vé và chuyển sang màn hình "Vé của tôi"
-                                  bookingProvider.clearSelectionAfterBooking();
-                                  context.push('/my-tickets');
+
+                                  // Kích hoạt Dialog trạng thái thanh toán trực tuyến chuẩn logic của Web
+                                  final dynamic lastBookingData = bookingProvider.lastCreatedBooking;
+                                  print('=== LAST BOOKING DATA FOR RESOLUTION: $lastBookingData ===');
+                                  
+                                  // Trích xuất ticketId thực tế để polling trạng thái vé (Tránh lỗi HTTP 500 khi dùng sai Booking ID)
+                                  final rawTicketId = lastBookingData != null 
+                                      ? ((lastBookingData['ticket'] is Map ? lastBookingData['ticket']['id'] : null) ?? 
+                                         lastBookingData['id'] ?? 
+                                         lastBookingData['bookingId'])
+                                      : null;
+                                  final int? ticketIdForPolling = int.tryParse(rawTicketId?.toString() ?? '');
+                                  print('=== RESOLVED TICKET ID FOR POLLING: $ticketIdForPolling ===');
+
+                                  if (ticketIdForPolling != null) {
+                                    final ticketProvider = Provider.of<TicketProvider>(context, listen: false);
+                                    _showPaymentProcessingDialog(
+                                      context: context,
+                                      bookingId: ticketIdForPolling,
+                                      bookingProvider: bookingProvider,
+                                      ticketProvider: ticketProvider,
+                                    );
+                                  } else {
+                                    bookingProvider.clearSelectionAfterBooking();
+                                    context.push('/my-tickets');
+                                  }
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
