@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
 
 class BookingCheckoutPage extends StatefulWidget {
@@ -530,12 +531,42 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                               );
 
                               if (success && mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(_selectedPaymentMethod == 'Cash' ? 'Đặt vé thành công!' : 'Thanh toán trực tuyến thành công!'),
-                                    backgroundColor: const Color(0xff006e1c),
-                                  ),
-                                );
+                                if (checkoutMethod == 'vnpay' || checkoutMethod == 'stripe') {
+                                  final String? payUrl = bookingProvider.paymentUrl;
+                                  if (payUrl != null && payUrl.isNotEmpty) {
+                                    try {
+                                      final Uri uri = Uri.parse(payUrl);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Đang mở cổng thanh toán trực tuyến bảo mật...'),
+                                          backgroundColor: Color(0xff006e1c),
+                                        ),
+                                      );
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Không thể mở liên kết thanh toán: $e'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Không tìm thấy link thanh toán từ hệ thống.'),
+                                        backgroundColor: Colors.amber,
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Đặt vé thành công!'),
+                                      backgroundColor: Color(0xff006e1c),
+                                    ),
+                                  );
+                                }
                                 context.push('/boarding-pass');
                               } else {
                                 if (mounted) {

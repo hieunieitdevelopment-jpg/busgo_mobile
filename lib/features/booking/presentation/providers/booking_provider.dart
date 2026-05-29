@@ -62,10 +62,12 @@ class BookingProvider extends ChangeNotifier {
   bool _isLoadingSeats = false;
   bool _isLoadingStops = false;
   dynamic _lastCreatedBooking;
+  String? _paymentUrl;
   
   List<dynamic> get schedules => _schedules;
   List<dynamic> get coupons => _coupons;
   bool get isLoading => _isLoading;
+  String? get paymentUrl => _paymentUrl;
   String? get errorMessage => _errorMessage;
 
   String get currentFrom => _currentFrom;
@@ -521,6 +523,19 @@ class BookingProvider extends ChangeNotifier {
           print('=== ĐĂNG KÝ PHƯƠNG THỨC THANH TOÁN THÀNH CÔNG ===');
           print(paymentResponse.data);
 
+          _paymentUrl = null;
+          final dynamic payData = paymentResponse.data;
+          if (payData != null) {
+            if (payData is Map) {
+              _paymentUrl = payData['paymentUrl'] ?? 
+                            payData['url'] ?? 
+                            (payData['data'] is Map ? payData['data']['paymentUrl'] ?? payData['data']['url'] : null);
+            } else if (payData is String) {
+              _paymentUrl = payData;
+            }
+          }
+          print('Trích xuất paymentUrl thành công: $_paymentUrl');
+
           _isLoading = false;
           notifyListeners();
           return true;
@@ -554,6 +569,7 @@ class BookingProvider extends ChangeNotifier {
     _selectedPickup = null;
     _selectedDropoff = null;
     _tripId = null;
+    _paymentUrl = null;
     notifyListeners();
   }
 }
