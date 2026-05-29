@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:busgo_mobile/core/api/notification_service.dart';
+import 'package:busgo_mobile/features/notifications/presentation/providers/notification_provider.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -12,8 +14,7 @@ class NotificationsPage extends StatefulWidget {
 
 class _NotificationsPageState extends State<NotificationsPage> {
   final NotificationService _notificationService = NotificationService();
-  
-  List<dynamic> _notifications = [];
+
   bool _isLoading = true;
   bool _isLoggedIn = false;
   int? _nextCursor;
@@ -62,17 +63,24 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
       final data = response.data;
       if (data != null) {
+        if (!mounted) return;
         final List<dynamic> fetchedList = data['notifications'] ?? [];
         final int? next = data['next'];
 
+        final notiProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        List<dynamic> merged;
+        if (isRefresh || _nextCursor == null) {
+          merged = List<dynamic>.from(fetchedList);
+        } else {
+          merged = List<dynamic>.from(notiProvider.notifications)
+            ..addAll(fetchedList);
+        }
+        // Sắp xếp ID từ lớn đến nhỏ (mới nhất lên trên)
+        merged.sort((a, b) => (b['id'] ?? 0).compareTo(a['id'] ?? 0));
+        notiProvider.setNotifications(merged);
+
         setState(() {
-          if (isRefresh || _nextCursor == null) {
-            _notifications = fetchedList;
-          } else {
-            _notifications.addAll(fetchedList);
-          }
-          // Sắp xếp ID từ lớn đến nhỏ (mới nhất lên trên)
-          _notifications.sort((a, b) => (b['id'] ?? 0).compareTo(a['id'] ?? 0));
           _nextCursor = next;
         });
       }
@@ -95,21 +103,17 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Future<void> _markAsRead(Map<String, dynamic> notification) async {
     final int? id = notification['id'];
     if (id == null) return;
-
-    // Đánh dấu đã đọc trên UI ngay lập tức để đem lại trải nghiệm tức thì
-    setState(() {
-      notification['isRead'] = true;
-    });
-
-    try {
-      await _notificationService.markNotificationRead(id);
-    } catch (_) {
-      // Bỏ qua lỗi ngầm để tránh ngắt quãng trải nghiệm người dùng
-    }
+    // Sử dụng provider để toàn bộ UI (kể cả chuông trên Home) cập nhật theo.
+    await Provider.of<NotificationProvider>(context, listen: false)
+        .markAsRead(id);
   }
 
   Future<void> _markAllAsRead() async {
-    final unreadList = _notifications.where((n) => n['isRead'] == false || n['isRead'] == 0).toList();
+    final notiProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+    final unreadList = notiProvider.notifications
+        .where((n) => n['isRead'] == false || n['isRead'] == 0)
+        .toList();
     if (unreadList.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tất cả thông báo đã được đọc rồi!')),
@@ -117,25 +121,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
       return;
     }
 
-    // Cập nhật UI hàng loạt
-    setState(() {
-      for (var n in _notifications) {
-        n['isRead'] = true;
-      }
-    });
+    await notiProvider.markAllAsRead();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã đánh dấu đọc tất cả thông báo thành công!')),
-    );
-
-    // Gọi API ngầm cho từng thông báo chưa đọc
-    for (var n in unreadList) {
-      final int? id = n['id'];
-      if (id != null) {
-        try {
-          await _notificationService.markNotificationRead(id);
-        } catch (_) {}
-      }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã đánh dấu đọc tất cả thông báo thành công!')),
+      );
     }
   }
 
@@ -268,8 +259,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -287,12 +276,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
         ),
         actions: [
-          if (_isLoggedIn && _notifications.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.done_all, color: Colors.white),
-              tooltip: 'Đọc tất cả',
-              onPressed: _markAllAsRead,
-            ),
+          Consumer<NotificationProvider>(
+            builder: (context, notiProvider, _) {
+              if (!_isLoggedIn || notiProvider.notifications.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return IconButton(
+                icon: const Icon(Icons.done_all, color: Colors.white),
+                tooltip: 'Đọc tất cả',
+                onPressed: _markAllAsRead,
+              );
+            },
+          ),
         ],
       ),
       body: !_isLoggedIn
@@ -303,16 +298,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     valueColor: AlwaysStoppedAnimation<Color>(Color(0xff006e1c)),
                   ),
                 )
-              : _notifications.isEmpty
-                  ? _buildEmptyState()
-                  : RefreshIndicator(
+              : Consumer<NotificationProvider>(
+                  builder: (context, notiProvider, _) {
+                    final list = notiProvider.notifications;
+                    if (list.isEmpty) {
+                      return _buildEmptyState();
+                    }
+                    return RefreshIndicator(
                       onRefresh: () => _fetchNotifications(isRefresh: true),
                       color: const Color(0xff006e1c),
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                        itemCount: _notifications.length + (_nextCursor != null ? 1 : 0),
+                        itemCount: list.length + (_nextCursor != null ? 1 : 0),
                         itemBuilder: (context, index) {
-                          if (index == _notifications.length) {
+                          if (index == list.length) {
                             if (!_isLoadingMore) {
                               // Tự động tải thêm khi cuộn tới cuối trang
                               _fetchNotifications();
@@ -332,7 +331,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                             );
                           }
 
-                          final notification = _notifications[index];
+                          final notification = list[index];
                           final bool isRead = notification['isRead'] == true || notification['isRead'] == 1;
                           final String title = notification['title'] ?? 'Thông báo';
                           final String body = notification['body'] ?? '';
@@ -427,7 +426,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           );
                         },
                       ),
-                    ),
+                    );
+                  },
+                ),
     );
   }
 
