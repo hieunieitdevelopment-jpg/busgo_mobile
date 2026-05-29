@@ -12,9 +12,10 @@ class BookingCheckoutPage extends StatefulWidget {
 }
 
 class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
-  final _nameController = TextEditingController(text: 'Nguyen Van A');
+  // Giữ các controller ẩn với giá trị mặc định để truyền cho API mà không cần người dùng nhập
+  final _nameController = TextEditingController(text: 'Khách hàng BusGo');
   final _phoneController = TextEditingController(text: '0912345678');
-  final _emailController = TextEditingController(text: 'nguyenvana@gmail.com');
+  final _emailController = TextEditingController(text: 'customer@busgo.vn');
   
   final _cardNumberController = TextEditingController(text: '4242 4242 4242 4242');
   final _expiryController = TextEditingController(text: '12/26');
@@ -30,6 +31,10 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
   void initState() {
     super.initState();
     _startTimer();
+    // Tự động tải danh sách mã giảm giá từ API cho hành trình & số ghế đã chọn
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<BookingProvider>(context, listen: false).fetchCoupons();
+    });
   }
 
   void _startTimer() {
@@ -192,168 +197,179 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
 
                         // Coupon input box (horizontal input + button)
                         _buildVoucherInput(bookingProvider),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 20),
 
-                        // Horizontal list of available coupons (Quick-select vouchers)
-                        if (bookingProvider.coupons.isNotEmpty) ...[
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4, bottom: 8),
-                            child: Text(
-                              'CHỌN NHANH VOUCHER KHẢ DỤNG',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black45),
+                        // ĐỀ XUẤT VOUCHER TỪ API (Thay thế phần điền thông tin liên hệ hành khách cũ)
+                        const Row(
+                          children: [
+                            Icon(Icons.local_offer, color: Color(0xff006e1c), size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'Đề xuất Voucher & Khuyến mãi',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
                             ),
-                          ),
-                          SizedBox(
-                            height: 70,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: bookingProvider.coupons.length,
-                              itemBuilder: (context, index) {
-                                final coupon = bookingProvider.coupons[index];
-                                final String code = coupon['code'] ?? 'BUSGO';
-                                final String desc = coupon['description'] ?? 'Giảm giá cực hot';
-                                final int couponId = int.tryParse(coupon['id']?.toString() ?? '0') ?? 0;
-                                final bool isApplied = bookingProvider.couponId == couponId;
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        if (bookingProvider.coupons.isEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: const Column(
+                              children: [
+                                Icon(Icons.confirmation_number_outlined, color: Colors.grey, size: 36),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Chưa có mã khuyến mãi khả dụng',
+                                  style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Hệ thống chưa tìm thấy voucher phù hợp cho hành trình này.',
+                                  style: TextStyle(color: Colors.black38, fontSize: 11),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: bookingProvider.coupons.length,
+                            itemBuilder: (context, index) {
+                              final coupon = bookingProvider.coupons[index];
+                              final String code = coupon['code'] ?? 'BUSGO';
+                              final String title = coupon['title'] ?? 'Khuyến mãi hấp dẫn';
+                              final String desc = coupon['description'] ?? 'Áp dụng để nhận ưu đãi ngay';
+                              final int couponId = int.tryParse(coupon['id']?.toString() ?? '0') ?? 0;
+                              final bool isApplied = bookingProvider.couponId == couponId;
 
-                                return GestureDetector(
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                decoration: BoxDecoration(
+                                  color: isApplied ? const Color(0xff006e1c).withOpacity(0.04) : Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isApplied ? const Color(0xff006e1c) : Colors.grey.shade200,
+                                    width: isApplied ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: InkWell(
                                   onTap: () {
                                     setState(() {
                                       _couponCodeController.text = code;
                                     });
                                     _applyTypedCoupon(bookingProvider);
                                   },
-                                  child: Container(
-                                    width: 180,
-                                    margin: const EdgeInsets.only(right: 10),
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: isApplied ? const Color(0xff006e1c).withOpacity(0.06) : Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: isApplied ? const Color(0xff006e1c) : Colors.grey.shade200,
-                                        width: isApplied ? 1.5 : 1,
-                                      ),
-                                    ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
                                     child: Row(
                                       children: [
-                                        Icon(
-                                          Icons.local_offer,
-                                          color: isApplied ? const Color(0xff006e1c) : Colors.amber.shade700,
-                                          size: 20,
+                                        // Left accent icon/badge
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: isApplied ? const Color(0xff006e1c) : Colors.green.shade50,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.local_offer,
+                                            color: isApplied ? Colors.white : const Color(0xff006e1c),
+                                            size: 20,
+                                          ),
                                         ),
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: 12),
+                                        
+                                        // Middle texts
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    code,
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 14,
+                                                      color: isApplied ? const Color(0xff006e1c) : Colors.black87,
+                                                    ),
+                                                  ),
+                                                  if (isApplied) ...[
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xff006e1c),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: const Text(
+                                                        'Đã áp dụng',
+                                                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
                                               Text(
-                                                code,
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
-                                                  color: isApplied ? const Color(0xff006e1c) : Colors.black87,
-                                                ),
+                                                title,
+                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                               Text(
                                                 desc,
-                                                style: const TextStyle(fontSize: 9, color: Colors.grey),
-                                                maxLines: 1,
+                                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                                maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ],
                                           ),
                                         ),
+                                        const SizedBox(width: 8),
+                                        
+                                        // Right apply button
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            setState(() {
+                                              _couponCodeController.text = code;
+                                            });
+                                            _applyTypedCoupon(bookingProvider);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: isApplied ? Colors.grey.shade300 : const Color(0xff006e1c),
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          child: Text(
+                                            isApplied ? 'Hủy' : 'Áp dụng',
+                                            style: TextStyle(
+                                              color: isApplied ? Colors.black54 : Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Passenger Info Section
-                        const Text(
-                          'Thông tin liên hệ hành khách',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Column(
-                            children: [
-                              TextField(
-                                controller: _nameController,
-                                decoration: InputDecoration(
-                                  prefixIcon: const Icon(Icons.person_outline, color: Color(0xff006e1c), size: 20),
-                                  hintText: 'Họ và tên',
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: const BorderSide(color: Color(0xff006e1c), width: 1.2),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: Colors.grey.shade200),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  fillColor: Colors.grey.shade50,
-                                  filled: true,
                                 ),
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: _phoneController,
-                                decoration: InputDecoration(
-                                  prefixIcon: const Icon(Icons.phone_android_outlined, color: Color(0xff006e1c), size: 20),
-                                  hintText: 'Số điện thoại',
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: const BorderSide(color: Color(0xff006e1c), width: 1.2),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: Colors.grey.shade200),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  fillColor: Colors.grey.shade50,
-                                  filled: true,
-                                ),
-                                style: const TextStyle(fontSize: 13),
-                                keyboardType: TextInputType.phone,
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: _emailController,
-                                decoration: InputDecoration(
-                                  prefixIcon: const Icon(Icons.mail_outline, color: Color(0xff006e1c), size: 20),
-                                  hintText: 'Email nhận vé',
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: const BorderSide(color: Color(0xff006e1c), width: 1.2),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: Colors.grey.shade200),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  fillColor: Colors.grey.shade50,
-                                  filled: true,
-                                ),
-                                style: const TextStyle(fontSize: 13),
-                                keyboardType: TextInputType.emailAddress,
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
 
                         // Payment Methods Title
                         const Text(
@@ -502,19 +518,6 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                           height: 52,
                           child: ElevatedButton.icon(
                             onPressed: () async {
-                              if (_nameController.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Vui lòng nhập tên hành khách'), backgroundColor: Colors.red),
-                                );
-                                return;
-                              }
-                              if (_phoneController.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Vui lòng nhập số điện thoại'), backgroundColor: Colors.red),
-                                );
-                                return;
-                              }
-
                               final String checkoutMethod = _selectedPaymentMethod == 'Cash'
                                   ? 'cash'
                                   : (_selectedPaymentMethod == 'Card' ? 'stripe' : 'vnpay');
@@ -868,7 +871,7 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                   child: TextField(
                     controller: _couponCodeController,
                     decoration: InputDecoration(
-                      hintText: 'Nhập mã ưu đãi',
+                      hintText: 'Nhập mã ưu đãi thủ công',
                       hintStyle: const TextStyle(fontSize: 13, color: Colors.black26),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
