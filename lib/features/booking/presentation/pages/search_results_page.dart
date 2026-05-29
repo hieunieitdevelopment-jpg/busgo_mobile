@@ -25,6 +25,12 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     return double.tryParse(cleanPriceStr) ?? 250000.0;
   }
 
+  String _formatCurrency(double amount) {
+    final String str = amount.toInt().toString();
+    final RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    return '${str.replaceAllMapped(reg, (Match m) => '${m[1]}.')}đ';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +67,47 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     });
   }
 
+  Widget _buildSortTab(String value, IconData icon) {
+    final bool isSelected = _selectedSort == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedSort = value;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.green.shade50 : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Colors.green : Colors.grey.shade300,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.green : Colors.grey.shade600,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? Colors.green : Colors.grey.shade700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bookingProvider = Provider.of<BookingProvider>(context);
@@ -76,7 +123,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
         : '${bookingProvider.currentFrom.isEmpty ? 'Hà Nội' : bookingProvider.currentFrom} ➔ ${bookingProvider.currentTo.isEmpty ? 'Sa Pa' : bookingProvider.currentTo}';
     final String searchDate = bookingProvider.currentDate.isEmpty ? fallbackDate : bookingProvider.currentDate;
 
-    // Apply company filter if it's set
+    // Lọc theo nhà xe
     final rawSchedules = bookingProvider.schedules;
     final List<dynamic> schedules = bookingProvider.companyFilter.isEmpty
         ? List.from(rawSchedules)
@@ -91,7 +138,6 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                                  (trip['tripSchedule'] is Map ? trip['tripSchedule']['companyName'] ?? trip['tripSchedule']['company_name'] : null) ?? 
                                  (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : '')).toString().toLowerCase();
             
-            // Filter by ID if available, otherwise fallback to substring match
             if (bookingProvider.companyIdFilter.isNotEmpty && companyId.isNotEmpty) {
               return companyId == bookingProvider.companyIdFilter;
             }
@@ -115,7 +161,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       schedules.sort((a, b) {
         final double ra = double.tryParse((a['rating'] ?? a['avgRating'] ?? '4.5').toString()) ?? 4.5;
         final double rb = double.tryParse((b['rating'] ?? b['avgRating'] ?? '4.5').toString()) ?? 4.5;
-        return rb.compareTo(ra); // Giảm dần (Đánh giá cao nhất xếp trước)
+        return rb.compareTo(ra); // Giảm dần
       });
     }
 
@@ -168,7 +214,23 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       ),
       body: Column(
         children: [
-          const SizedBox(height: 12),
+          // Sắp xếp nhanh (Sort Bar)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            color: Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildSortTab('Giờ chạy sớm', Icons.access_time),
+                _buildSortTab('Giá rẻ nhất', Icons.sell_outlined),
+                _buildSortTab('Đánh giá cao', Icons.star_outline),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+          const SizedBox(height: 8),
+
+          // Lưới kết quả chuyến xe
           Expanded(
             child: bookingProvider.isLoading
                 ? const Center(
@@ -213,22 +275,22 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                             itemBuilder: (context, index) {
                               final trip = schedules[index];
                               
-                               final compObj = trip['company'] ?? (trip['tripSchedule'] is Map ? trip['tripSchedule']['company'] : null);
-                               final companyName = trip['name'] ?? 
-                                                   trip['companyName'] ?? 
-                                                   trip['company_name'] ?? 
-                                                   (trip['tripSchedule'] is Map ? trip['tripSchedule']['companyName'] ?? trip['tripSchedule']['company_name'] : null) ?? 
-                                                   (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : null) ?? 
-                                                   'Chuyến xe';
-                               final logoUrl = trip['logoUrl'] ?? 
-                                               trip['logo_url'] ?? 
-                                               (trip['tripSchedule'] is Map ? trip['tripSchedule']['logoUrl'] ?? trip['tripSchedule']['logo_url'] : null) ?? 
-                                               (compObj is Map ? compObj['logo'] ?? compObj['logoUrl'] ?? compObj['logo_url'] : null);
-                               final hotline = trip['hotline'] ?? 
-                                               trip['phone'] ?? 
-                                               (trip['tripSchedule'] is Map ? trip['tripSchedule']['hotline'] ?? trip['tripSchedule']['phone'] : null) ?? 
-                                               (compObj is Map ? compObj['phone'] ?? compObj['phone_number'] ?? compObj['hotline'] : '') ?? 
-                                               '0388985684';
+                              final compObj = trip['company'] ?? (trip['tripSchedule'] is Map ? trip['tripSchedule']['company'] : null);
+                              final companyName = trip['name'] ?? 
+                                                  trip['companyName'] ?? 
+                                                  trip['company_name'] ?? 
+                                                  (trip['tripSchedule'] is Map ? trip['tripSchedule']['companyName'] ?? trip['tripSchedule']['company_name'] : null) ?? 
+                                                  (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : null) ?? 
+                                                  'Chuyến xe';
+                              final logoUrl = trip['logoUrl'] ?? 
+                                              trip['logo_url'] ?? 
+                                              (trip['tripSchedule'] is Map ? trip['tripSchedule']['logoUrl'] ?? trip['tripSchedule']['logo_url'] : null) ?? 
+                                              (compObj is Map ? compObj['logo'] ?? compObj['logoUrl'] ?? compObj['logo_url'] : null);
+                              final hotline = trip['hotline'] ?? 
+                                              trip['phone'] ?? 
+                                              (trip['tripSchedule'] is Map ? trip['tripSchedule']['hotline'] ?? trip['tripSchedule']['phone'] : null) ?? 
+                                              (compObj is Map ? compObj['phone'] ?? compObj['phone_number'] ?? compObj['hotline'] : '') ?? 
+                                              '0388985684';
                               final distanceKm = trip['distanceKm'] ?? trip['distance_km'];
                               
                               // Lấy địa điểm thực tế từ API
@@ -257,6 +319,16 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                                 }
                               } catch (_) {}
 
+                              // Trích xuất loại xe
+                              final vehicleObj = trip['vehicle'] ?? (trip['tripSchedule'] is Map ? trip['tripSchedule']['vehicle'] : null);
+                              final vehicleName = (trip['vehicleName'] ?? 
+                                                   (trip['tripSchedule'] is Map ? trip['tripSchedule']['vehicleName'] : null) ?? 
+                                                   (vehicleObj is Map ? vehicleObj['name'] ?? vehicleObj['type'] : null) ?? 
+                                                   'Xe giường nằm').toString();
+
+                              // Trích xuất giá vé
+                              final double price = _parsePrice(trip);
+
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 12.0),
                                 child: _buildOperatorCard(
@@ -274,6 +346,8 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                                   distanceKm: distanceKm != null ? '$distanceKm KM' : null,
                                   fromStation: fromLoc,
                                   toStation: toLoc,
+                                  price: price,
+                                  vehicleType: vehicleName,
                                 ),
                               );
                             },
@@ -296,6 +370,8 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     required String? distanceKm,
     required String fromStation,
     required String toStation,
+    required double price,
+    required String vehicleType,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -363,23 +439,39 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                                   color: Color(0xFF1E1E1E),
                                 ),
                               ),
-                              if (hotline.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Icon(Icons.phone, size: 12, color: Colors.grey.shade600),
-                                    const SizedBox(width: 4),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      vehicleType,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.green.shade800,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  if (hotline.isNotEmpty) ...[
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.phone, size: 10, color: Colors.grey.shade600),
+                                    const SizedBox(width: 2),
                                     Text(
                                       hotline,
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 10,
                                         color: Colors.grey.shade600,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
-                                ),
-                              ],
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -394,10 +486,9 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                             child: Text(
                               distanceKm,
                               style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF555555),
-                              ),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF555555)),
                             ),
                           ),
                       ],
@@ -517,28 +608,43 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                 ),
               ),
               const SizedBox(width: 16),
-              // Right Column: Chọn vé button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF6D00),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFF6D00).withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
+              // Right Column: Price and Chọn vé button
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _formatCurrency(price),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: Color(0xFFFF6D00),
                     ),
-                  ],
-                ),
-                child: const Text(
-                  'Chọn vé',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Colors.white,
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6D00),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF6D00).withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'Chọn vé',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
