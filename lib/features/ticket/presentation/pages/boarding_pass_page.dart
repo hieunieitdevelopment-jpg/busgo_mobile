@@ -52,6 +52,27 @@ class BoardingPassPage extends StatelessWidget {
 
     final int bookingId = int.tryParse((realTicket != null ? realTicket['id'] ?? realTicket['bookingId'] ?? '108249' : '108249').toString()) ?? 108249;
 
+    // Tổng tiền: ưu tiên lấy từ ticket thật (totalAmount), fallback bookingProvider.totalPrice
+    double resolvedTotal = 0;
+    if (realTicket is Map) {
+      final raw = realTicket['totalAmount'] ??
+          realTicket['total_amount'] ??
+          realTicket['amount'] ??
+          (realTicket['ticket'] is Map
+              ? realTicket['ticket']['totalAmount'] ?? realTicket['ticket']['total_amount']
+              : null);
+      if (raw is num) {
+        resolvedTotal = raw.toDouble();
+      } else if (raw != null) {
+        final clean = raw.toString().replaceAll(RegExp(r'[^0-9]'), '');
+        resolvedTotal = double.tryParse(clean) ?? 0;
+      }
+    }
+    if (resolvedTotal <= 0) {
+      resolvedTotal = bookingProvider.totalPrice;
+    }
+    final String totalAmountText = '${resolvedTotal.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}đ';
+
     return Scaffold(
       backgroundColor: const Color(0xff121212), // High-End Dark Frame
       appBar: AppBar(
@@ -216,7 +237,7 @@ class BoardingPassPage extends StatelessWidget {
                                   const Text('Tổng tiền', style: TextStyle(color: Colors.grey, fontSize: 11)),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${bookingProvider.totalPrice.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}đ',
+                                    totalAmountText,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
                                   ),
                                 ],
@@ -224,54 +245,7 @@ class BoardingPassPage extends StatelessWidget {
                             ],
                           ),
                           
-                          // Dashed Tear-Line Representation
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20.0),
-                            child: Row(
-                              children: List.generate(
-                                20,
-                                (index) => Expanded(
-                                  child: Container(
-                                    height: 1,
-                                    color: index % 2 == 0 ? Colors.transparent : Colors.grey.shade300,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // QR Code Container
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade100),
-                            ),
-                            child: Column(
-                              children: [
-                                // Mock QR graphic lines
-                                Container(
-                                  width: 140,
-                                  height: 140,
-                                  color: Colors.white,
-                                  child: const Center(
-                                    child: Icon(Icons.qr_code_2, size: 120, color: Colors.black87),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                const Text(
-                                  'MÃ LÊN XE (BOARDING QR CODE)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5, color: Colors.black87),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Trình mã này cho lái xe để soát vé nhanh',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
+                          // (Đã bỏ phần QR code và dải nét đứt phía dưới theo yêu cầu)
                         ],
                       ),
                     ),

@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
+import 'package:busgo_mobile/features/ticket/data/cash_tickets_tracker.dart';
 import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
+import 'package:busgo_mobile/features/rating/presentation/widgets/review_trip_modal.dart';
 
 class MyTicketsPage extends StatefulWidget {
   const MyTicketsPage({super.key});
@@ -17,13 +19,39 @@ class MyTicketsPage extends StatefulWidget {
 class _MyTicketsPageState extends State<MyTicketsPage> {
   bool _showActiveTab = true; // true: Sắp đi (Active), false: Lịch sử (History)
 
+  // Sets ticketIds & bookingIds đã chọn thanh toán tiền mặt (lưu phía client).
+  // Vì server không trả paymentMethod trong list, dùng SharedPreferences để nhớ.
+  Set<int> _cashTicketIds = const {};
+  Set<int> _cashBookingIds = const {};
+
   @override
   void initState() {
     super.initState();
     // Tải dữ liệu vé thật khi mở trang
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       Provider.of<TicketProvider>(context, listen: false).fetchMyTickets();
+      final all = await CashTicketsTracker().loadAll();
+      if (mounted) {
+        setState(() {
+          _cashTicketIds = all.tickets;
+          _cashBookingIds = all.bookings;
+        });
+      }
     });
+  }
+
+  /// Kiểm tra một vé có là thanh toán tiền mặt không (theo cache phía client).
+  bool _isCashTicket(dynamic ticket) {
+    if (ticket is! Map) return false;
+    // Ưu tiên field từ server nếu có (forward-compat)
+    final paymentRaw =
+        (ticket['paymentMethod'] ?? ticket['paymentType'] ?? '').toString().toUpperCase();
+    if (paymentRaw == 'CASH') return true;
+    final tId = int.tryParse(ticket['id']?.toString() ?? '');
+    final bId = int.tryParse(ticket['bookingId']?.toString() ?? '');
+    if (tId != null && _cashTicketIds.contains(tId)) return true;
+    if (bId != null && _cashBookingIds.contains(bId)) return true;
+    return false;
   }
 
   // Định dạng ngày giờ đi tiếng Việt đẹp mắt
@@ -342,187 +370,38 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
 
   // Mở Bottom Sheet đánh giá chuyến đi (Rating) cực kỳ xịn sò
   void _openRatingBottomSheet(BuildContext context, dynamic ticket, TicketProvider ticketProvider) {
-    final int tripId = int.tryParse((ticket['tripId'] ?? ticket['tripScheduleId'] ?? ticket['id']).toString()) ?? 0;
-    final String operatorName = ticket['companyName'] ?? ticket['operatorName'] ?? 'Nhà xe đối tác';
-    final String route = '${ticket['fromLocation'] ?? 'Hành trình'} ➔ ${ticket['toLocation'] ?? ''}';
+    final int tripId = int.tryParse(
+            (ticket['tripId'] ??
+                    ticket['tripScheduleId'] ??
+                    (ticket['trip'] is Map ? ticket['trip']['id'] : null) ??
+                    ticket['scheduleId'] ??
+                    ticket['id'])
+                .toString()) ??
+        0;
+    final int ticketId =
+        int.tryParse(ticket['id']?.toString() ?? '') ?? 0;
+    final String operatorName =
+        ticket['companyName'] ?? ticket['operatorName'] ?? 'Nhà xe đối tác';
+    final String fromLoc = ticket['fromLocation'] ?? 'Điểm đi';
+    final String toLoc = ticket['toLocation'] ?? 'Điểm đến';
+    final String departureDate =
+        _formatDepartureDate(ticket['departureDate']?.toString());
 
-    int selectedStars = 5;
-    final commentController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext bc) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Container(
-              padding: EdgeInsets.only(
-                top: 24,
-                left: 24,
-                right: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 32,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      const Icon(Icons.rate_review_outlined, color: Colors.green, size: 28),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Đánh giá chuyến đi',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    route,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black54),
-                  ),
-                  Text(
-                    'Nhà xe: $operatorName',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                  const Divider(height: 32),
-                  const Center(
-                    child: Text(
-                      'Bạn chấm bao nhiêu sao cho chuyến đi này?',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black54),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Star selection
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      final starValue = index + 1;
-                      return IconButton(
-                        icon: Icon(
-                          starValue <= selectedStars ? Icons.star : Icons.star_border,
-                          color: starValue <= selectedStars ? Colors.amber : Colors.grey.shade400,
-                          size: 40,
-                        ),
-                        onPressed: () {
-                          setModalState(() {
-                            selectedStars = starValue;
-                          });
-                        },
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Nhận xét của bạn',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: commentController,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: 'Nhập ý kiến đánh giá về dịch vụ, tài xế, độ sạch sẽ của xe...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: Colors.green, width: 1.5),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        Navigator.pop(context); // Đóng Bottom Sheet
-                        
-                        // Hiển thị vòng xoay tải
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (context) => const Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                            ),
-                          ),
-                        );
-
-                        final success = await ticketProvider.submitRating(
-                          tripId: tripId,
-                          rating: selectedStars,
-                          comment: commentController.text,
-                        );
-
-                        if (context.mounted) {
-                          Navigator.pop(context); // Đóng xoay tải
-                          
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Cảm ơn bạn đã gửi đánh giá! Ý kiến của bạn sẽ giúp nhà xe cải thiện chất lượng phục vụ.'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            ticketProvider.fetchMyTickets(); // Làm mới danh sách
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(ticketProvider.errorMessage ?? 'Không thể gửi đánh giá. Vui lòng thử lại sau.'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'GỬI ĐÁNH GIÁ NGAY',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    showReviewTripModal(
+      context,
+      payload: ReviewTicketPayload(
+        ticketId: ticketId,
+        tripId: tripId,
+        companyName: operatorName,
+        departureLocation: fromLoc,
+        arrivalLocation: toLoc,
+        departureDate: departureDate,
+      ),
+    ).then((submitted) {
+      if (submitted == true) {
+        ticketProvider.fetchMyTickets();
+      }
+    });
   }
 
   // Hủy vé
@@ -682,6 +561,18 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
       return _showActiveTab ? isUpcoming : !isUpcoming;
     }).toList();
 
+    // Sắp xếp: mới đặt nhất lên đầu (id giảm dần, fallback bookingId).
+    // Trong DB id thường tăng theo thời gian tạo, nên đây là proxy đáng tin cho "vừa đặt".
+    filteredList.sort((a, b) {
+      final ia = int.tryParse(a['id']?.toString() ?? '') ??
+          int.tryParse(a['bookingId']?.toString() ?? '') ??
+          0;
+      final ib = int.tryParse(b['id']?.toString() ?? '') ??
+          int.tryParse(b['bookingId']?.toString() ?? '') ??
+          0;
+      return ib.compareTo(ia);
+    });
+
     return Scaffold(
       backgroundColor: const Color(0xfff8f9fa),
       appBar: AppBar(
@@ -820,7 +711,9 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                           
                           // Lấy và chuẩn hóa trạng thái vé giống như trên Web
                           String currentStatus = (ticket['status'] ?? 'pending').toString().toUpperCase();
-                          final isCash = (ticket['paymentMethod'] ?? ticket['paymentType'] ?? '').toString().toUpperCase() == 'CASH';
+                          // Vé thanh toán tiền mặt: nâng từ PENDING/RESERVED → CASH_PAID
+                          // (vì user đã coi là "đã thanh toán", chỉ chờ nhà xe hoàn thành chuyến để đánh giá).
+                          final isCash = _isCashTicket(ticket);
                           if (isCash && (currentStatus == 'PENDING' || currentStatus == 'RESERVED')) {
                             currentStatus = 'CASH_PAID';
                           }
@@ -1429,54 +1322,139 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                     ),
                   ],
 
-                  // Nút đánh giá cho vé đã hoàn thành
-                  if (currentStatus == 'COMPLETED' && !(ticket['isReviewed'] == true || ticket['hasRating'] == true)) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _openRatingBottomSheet(context, ticket, ticketProvider),
-                        icon: const Icon(Icons.star_rounded, size: 18),
-                        label: const Text('Đánh giá chuyến đi', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xffffc107),
-                          foregroundColor: const Color(0xff1a1a2e),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-
-                  if (currentStatus == 'COMPLETED' && (ticket['isReviewed'] == true || ticket['hasRating'] == true)) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xffe6f9f0),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xff0d9f61).withOpacity(0.2)),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle_rounded, color: Color(0xff0d9f61), size: 16),
-                          SizedBox(width: 8),
-                          Text(
-                            'Đã gửi đánh giá',
-                            style: TextStyle(color: Color(0xff0d9f61), fontWeight: FontWeight.w700, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  // Nhóm trạng thái đánh giá theo 4 case (đủ điều kiện / chưa hoàn thành / hết hạn / đã đánh giá)
+                  ..._buildReviewSection(
+                    context: context,
+                    ticket: ticket,
+                    currentStatus: currentStatus,
+                    ticketProvider: ticketProvider,
+                  ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Trả về widget(s) hiển thị nhóm trạng thái Review.
+  /// Logic theo spec:
+  /// - Status ∈ {PAID, CHECKED_IN, CASH_PAID} && chưa COMPLETED → "Chưa hoàn thành" (disabled)
+  /// - COMPLETED && đã review → badge "Đã đánh giá"
+  /// - COMPLETED && chưa review:
+  ///     - now > departureDate + 7 ngày → "Hết hạn ĐG" (disabled)
+  ///     - else → nút "Đánh giá" (vàng)
+  List<Widget> _buildReviewSection({
+    required BuildContext context,
+    required dynamic ticket,
+    required String currentStatus,
+    required TicketProvider ticketProvider,
+  }) {
+    final bool reviewed =
+        ticket['isReviewed'] == true || ticket['hasRating'] == true;
+
+    // 1. COMPLETED + đã review → badge xanh
+    if (currentStatus == 'COMPLETED' && reviewed) {
+      return [
+        const SizedBox(height: 12),
+        _buildReviewBadge(
+          icon: Icons.check_circle_rounded,
+          color: const Color(0xff0d9f61),
+          bgColor: const Color(0xffe6f9f0),
+          label: 'Đã gửi đánh giá',
+        ),
+      ];
+    }
+
+    // 2. COMPLETED + chưa review → kiểm tra hết hạn 7 ngày
+    if (currentStatus == 'COMPLETED' && !reviewed) {
+      final DateTime? depDate =
+          DateTime.tryParse(ticket['departureDate']?.toString() ?? '');
+      if (depDate != null) {
+        final expiry = depDate.add(const Duration(days: 7));
+        if (DateTime.now().isAfter(expiry)) {
+          return [
+            const SizedBox(height: 12),
+            _buildReviewBadge(
+              icon: Icons.timer_off_outlined,
+              color: Colors.grey.shade600,
+              bgColor: Colors.grey.shade100,
+              label: 'Hết hạn đánh giá (quá 7 ngày)',
+            ),
+          ];
+        }
+      }
+      // Đủ điều kiện → nút Đánh giá vàng
+      return [
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () =>
+                _openRatingBottomSheet(context, ticket, ticketProvider),
+            icon: const Icon(Icons.star_rounded, size: 18),
+            label: const Text('Đánh giá chuyến đi',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xffffc107),
+              foregroundColor: const Color(0xff1a1a2e),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // 3. PAID/CHECKED_IN/CASH_PAID nhưng chưa COMPLETED → "Chưa hoàn thành"
+    if (currentStatus == 'PAID' ||
+        currentStatus == 'CHECKED_IN' ||
+        currentStatus == 'CASH_PAID') {
+      return [
+        const SizedBox(height: 12),
+        _buildReviewBadge(
+          icon: Icons.hourglass_bottom_rounded,
+          color: Colors.blueGrey.shade600,
+          bgColor: Colors.blueGrey.shade50,
+          label: 'Chưa hoàn thành chuyến đi',
+        ),
+      ];
+    }
+
+    // Còn lại (PENDING, CANCELLED, EXPIRED…) → không hiển thị review
+    return const [];
+  }
+
+  Widget _buildReviewBadge({
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required String label,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 12),
+          ),
+        ],
       ),
     );
   }

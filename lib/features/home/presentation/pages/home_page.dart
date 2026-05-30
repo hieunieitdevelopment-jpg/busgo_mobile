@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:busgo_mobile/core/api/public_service.dart';
+import 'package:busgo_mobile/core/api/rating_service.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
 import 'package:busgo_mobile/features/booking/data/booking_service.dart';
 import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:busgo_mobile/features/notifications/presentation/providers/notification_provider.dart';
+import 'package:busgo_mobile/features/rating/presentation/widgets/company_reviews_modal.dart';
 
 // Đồng bộ 100% danh sách Tỉnh/Thành phố từ Web (VIETNAM_PROVINCES)
 const List<String> _vietnamProvinces = [
@@ -30,9 +32,11 @@ class _HomePageState extends State<HomePage> {
   late final TextEditingController _dateController;
 
   final PublicService _publicService = PublicService();
+  final RatingService _ratingService = RatingService();
   List<dynamic> _promotions = [];
   List<dynamic> _companies = [];
   List<dynamic> _popularRoutes = [];
+  Map<int, CompanyRatingSummary> _companyRatings = {};
   bool _isLoadingData = false;
   String? _lastToken;
 
@@ -68,6 +72,34 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Fetch song song avg rating cho danh sách công ty (gọi 1 lần, cache 60s).
+  Future<void> _fetchCompanyRatings() async {
+    final ids = _companies
+        .map((c) {
+          final raw = c['id'] ?? c['_id'];
+          return int.tryParse(raw?.toString() ?? '');
+        })
+        .whereType<int>()
+        .toList();
+    if (ids.isEmpty) return;
+    final summaries = await _ratingService.getSummariesParallel(
+      companyIds: ids,
+      scanLimit: 100,
+    );
+    if (!mounted) return;
+    setState(() {
+      _companyRatings = summaries;
+      // Sort _companies giảm dần theo avgRating, ưu tiên có review trước.
+      _companies.sort((a, b) {
+        final ida = int.tryParse((a['id'] ?? a['_id'] ?? '0').toString()) ?? 0;
+        final idb = int.tryParse((b['id'] ?? b['_id'] ?? '0').toString()) ?? 0;
+        final ra = summaries[ida]?.avgRating ?? 0;
+        final rb = summaries[idb]?.avgRating ?? 0;
+        return rb.compareTo(ra);
+      });
+    });
+  }
+
   Future<void> _fetchPublicData() async {
     if (!mounted) return;
     setState(() => _isLoadingData = true);
@@ -80,6 +112,8 @@ class _HomePageState extends State<HomePage> {
           _promotions = promoRes.data['items'] ?? promoRes.data['promotions'] ?? promoRes.data['data'] ?? [];
           _companies = companyRes.data['companies'] ?? companyRes.data['data'] ?? [];
         });
+        // Fetch ratings song song cho 8 nhà xe đầu để giảm tải.
+        _fetchCompanyRatings();
       }
 
       // Fetch dynamic popular routes matching the React web client logic
@@ -630,21 +664,36 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 12),
                   if (_companies.isNotEmpty)
-                    ..._companies.map((company) {
+                    ..._companies.take(8).map((company) {
                       final companyName = company['name'] ?? company['company_name'] ?? 'Nhà xe đối tác';
+                      final int? cid = int.tryParse((company['id'] ?? company['_id'] ?? '').toString());
+                      final summary = cid != null ? _companyRatings[cid] : null;
+                      final ratingText = summary != null && summary.totalReviews > 0
+                          ? summary.avgRating.toStringAsFixed(1)
+                          : '0.0';
+                      final reviewsText = summary != null
+                          ? '${summary.totalReviews} đánh giá'
+                          : '0 đánh giá';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12.0),
                         child: _buildOperatorListItem(
                           context,
                           name: companyName,
                           logoUrl: company['logoUrl'],
-                          rating: '4.8',
-                          reviews: '320 đánh giá',
+                          rating: ratingText,
+                          reviews: reviewsText,
                           features: 'Wifi • Tivi • Sạc • Nước uống',
                           onTap: () => _navigateToCompanyTrips(
                             companyName,
                             companyId: (company['id'] ?? company['_id'] ?? '').toString(),
                           ),
+                          onTapRating: cid == null
+                              ? null
+                              : () => showCompanyReviewsModal(
+                                    context,
+                                    companyId: cid,
+                                    companyName: companyName,
+                                  ),
                         ),
                       );
                     })
@@ -1081,6 +1130,7 @@ class _HomePageState extends State<HomePage> {
     required String reviews,
     required String features,
     required VoidCallback onTap,
+    VoidCallback? onTapRating,
   }) {
     final bool hasLogo = logoUrl != null && logoUrl.isNotEmpty;
     
@@ -1181,24 +1231,39 @@ class _HomePageState extends State<HomePage> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    rating,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      color: Colors.black87,
+                              GestureDetector(
+                                onTap: onTapRating,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      rating,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        color: Colors.black87,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '($reviews)',
-                                    style: const TextStyle(color: Colors.grey, fontSize: 10),
-                                  ),
-                                ],
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '($reviews)',
+                                      style: TextStyle(
+                                        color: onTapRating != null
+                                            ? const Color(0xff006e1c)
+                                            : Colors.grey,
+                                        fontSize: 10,
+                                        fontWeight: onTapRating != null
+                                            ? FontWeight.w700
+                                            : FontWeight.normal,
+                                        decoration: onTapRating != null
+                                            ? TextDecoration.underline
+                                            : TextDecoration.none,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
