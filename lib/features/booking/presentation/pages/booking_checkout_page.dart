@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
 import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
+import 'package:busgo_mobile/features/ticket/data/cash_tickets_tracker.dart';
 import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
 import 'package:busgo_mobile/features/notifications/presentation/providers/notification_provider.dart';
 
@@ -711,8 +712,8 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Card Input Fields for Online Payments
-                        if (_selectedPaymentMethod == 'VNPay' || _selectedPaymentMethod == 'Card') ...[
+                        // Card Input Fields — CHỈ hiện khi chọn "Thanh toán bằng thẻ"
+                        if (_selectedPaymentMethod == 'Card') ...[
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -914,6 +915,28 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                   }
                                 } else {
                                   // Thanh toán tiền mặt: vé GIỮ CHỖ, thu tiền tại quầy/khi lên xe (vẫn ở trạng thái chờ thanh toán)
+                                  // Đánh dấu phía client: vé này thanh toán tiền mặt → coi như đã thanh toán, chỉ chờ nhà xe hoàn thành chuyến.
+                                  final lastBooking =
+                                      bookingProvider.lastCreatedBooking;
+                                  if (lastBooking is Map) {
+                                    final int? bId = int.tryParse(
+                                        (lastBooking['bookingId'] ??
+                                                lastBooking['id'] ??
+                                                '')
+                                            .toString());
+                                    final int? tId = int.tryParse(
+                                        ((lastBooking['ticket'] is Map
+                                                    ? lastBooking['ticket']
+                                                        ['id']
+                                                    : null) ??
+                                                '')
+                                            .toString());
+                                    await CashTicketsTracker().markCash(
+                                      ticketId: tId,
+                                      bookingId: bId,
+                                    );
+                                  }
+
                                   await _createUserNotification(
                                     title: 'Đặt vé tiền mặt thành công',
                                     body:

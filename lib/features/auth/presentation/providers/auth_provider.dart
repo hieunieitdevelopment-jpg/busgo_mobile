@@ -210,6 +210,21 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
+  // Gửi OTP đến email/SĐT (POST /auth/send-otp)
+  Future<bool> sendOtp({
+    required String field,
+    required String value,
+  }) async {
+    try {
+      await _authService.sendOtp(field: field, value: value);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('DioException: ', '');
+      // Re-throw để modal catch và hiển thị thông điệp đúng
+      rethrow;
+    }
+  }
+
   // Cập nhật thông tin liên lạc mới (PUT /customer/profile/contact)
   Future<bool> updateContact({
     required String field,

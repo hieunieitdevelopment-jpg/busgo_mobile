@@ -246,7 +246,7 @@ class PromotionDetailPage extends StatelessWidget {
               context.go('/');
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: theme.primaryColor,
+              backgroundColor: Colors.green.shade800,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
