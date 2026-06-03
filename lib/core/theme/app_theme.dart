@@ -7,7 +7,7 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     final baseTheme = ThemeData.light();
-    
+
     return baseTheme.copyWith(
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme.light(
@@ -20,9 +20,10 @@ class AppTheme {
         onPrimary: AppColors.onPrimary,
         error: AppColors.error,
       ),
-      
+
       // Typography - Be Vietnam Pro
-      textTheme: GoogleFonts.beVietnamProTextTheme(baseTheme.textTheme).copyWith(
+      textTheme:
+          GoogleFonts.beVietnamProTextTheme(baseTheme.textTheme).copyWith(
         displayLarge: GoogleFonts.beVietnamPro(
           fontSize: 32,
           fontWeight: FontWeight.bold,
@@ -63,10 +64,11 @@ class AppTheme {
         ),
       ),
 
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         color: AppColors.surfaceContainerLowest,
         elevation: 2,
-        shadowColor: Color(0x0a000000), // Sử dụng màu thuần để tránh runtime với const
+        shadowColor:
+            Color(0x0a000000), // Sử dụng màu thuần để tránh runtime với const
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
@@ -93,7 +95,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surfaceContainerLow,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
