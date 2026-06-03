@@ -13,7 +13,7 @@ Widget buildGoogleLoginButton({
     child: OutlinedButton(
       onPressed: isLoading ? null : onPressed,
       style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1.5),
+        side: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         padding: EdgeInsets.zero,
       ),

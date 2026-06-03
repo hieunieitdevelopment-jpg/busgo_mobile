@@ -64,7 +64,7 @@ class AppTheme {
         ),
       ),
 
-      cardTheme: const CardThemeData(
+      cardTheme: const CardTheme(
         color: AppColors.surfaceContainerLowest,
         elevation: 2,
         shadowColor:

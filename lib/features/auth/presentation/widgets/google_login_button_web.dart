@@ -52,7 +52,7 @@ class _GoogleButtonFace extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border:
-            Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1.5),
+            Border.all(color: Colors.grey.withOpacity(0.3), width: 1.5),
       ),
       child: Center(
         child: Semantics(

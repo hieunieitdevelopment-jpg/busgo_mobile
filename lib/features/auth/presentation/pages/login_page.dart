@@ -635,7 +635,7 @@ class _LoginPageState extends State<LoginPage> {
                                   foregroundColor: const Color(0xff1877F2),
                                   padding: EdgeInsets.zero,
                                   side: BorderSide(
-                                      color: Colors.grey.withValues(alpha: 0.3),
+                                      color: Colors.grey.withOpacity(0.3),
                                       width: 1.5),
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12)),
