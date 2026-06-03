@@ -21,6 +21,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.24.1'
 
       # 4. Tải các thư viện phụ thuộc của dự án
       - run: flutter pub get
