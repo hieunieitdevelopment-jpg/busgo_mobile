@@ -64,7 +64,7 @@ class AppTheme {
       ),
 
       // Card Theme (Tonal Shift instead of lines)
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surfaceContainerLowest,
         elevation: 2,
         shadowColor: AppColors.onSurface.withOpacity(0.04),

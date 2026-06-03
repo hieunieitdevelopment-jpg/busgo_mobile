@@ -15,6 +15,16 @@ class AuthService {
     );
   }
 
+  // Đăng nhập qua Google (Khớp với POST /auth/google/verify-token)
+  Future<Response> verifyGoogleToken(String idToken) async {
+    return await _apiClient.dio.post(
+      '/auth/google/verify-token',
+      data: {
+        'idToken': idToken,
+      },
+    );
+  }
+
   // Đăng ký tài khoản khách hàng mới (Khớp 100% với POST /customer/sign-up của Swagger)
   Future<Response> signUp({
     required String fullName,

@@ -1,24 +1,61 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:busgo_mobile/core/constants/api_constants.dart';
 import 'package:busgo_mobile/features/auth/data/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  late final GoogleSignIn _googleSignIn;
+  StreamSubscription<GoogleSignInAccount?>? _googleSignInSubscription;
   
   String? _token;
   Map<String, dynamic>? _user;
   bool _isLoading = false;
+  bool _isGoogleSignInReady = !kIsWeb;
   String? _errorMessage;
 
   String? get token => _token;
   Map<String, dynamic>? get user => _user;
   bool get isLoading => _isLoading;
+  bool get isGoogleSignInReady => _isGoogleSignInReady;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _token != null;
 
   AuthProvider() {
-    _loadPersistedData();
+    _googleSignIn = GoogleSignIn(
+      clientId: ApiConstants.GOOGLE_CLIENT_ID,
+      serverClientId: kIsWeb ? null : ApiConstants.GOOGLE_CLIENT_ID,
+      scopes: const ['email', 'profile', 'openid'],
+    );
+
+    _googleSignInSubscription = _googleSignIn.onCurrentUserChanged.listen(
+      (GoogleSignInAccount? account) {
+        if (!kIsWeb || account == null || _token != null || _isLoading) {
+          return;
+        }
+        unawaited(_completeGoogleSignIn(account));
+      },
+    );
+
+    if (kIsWeb) {
+      unawaited(_initializeGoogleSignInWeb());
+    }
+
+    unawaited(_loadPersistedData());
+  }
+
+  Future<void> _initializeGoogleSignInWeb() async {
+    try {
+      await _googleSignIn.signInSilently();
+    } catch (_) {
+      // Silent sign-in may fail when there is no Google session yet.
+    } finally {
+      _isGoogleSignInReady = true;
+      notifyListeners();
+    }
   }
 
   // Tự động nạp Token & Profile từ bộ nhớ khi bật App
@@ -37,7 +74,7 @@ class AuthProvider extends ChangeNotifier {
 
     // Nếu đã đăng nhập, tự động tải hồ sơ cá nhân mới nhất từ server
     if (isAuthenticated) {
-      fetchLatestProfile();
+      unawaited(fetchLatestProfile());
     }
   }
 
@@ -150,6 +187,98 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
+  // Luồng Đăng nhập qua Google (Sign In with Google)
+  Future<bool> signInWithGoogle() async {
+    if (kIsWeb) {
+      _errorMessage = 'Vui lòng dùng nút Google trên trang để đăng nhập.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        _errorMessage = 'Đăng nhập Google bị hủy.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      return await _verifyGoogleAccount(googleUser);
+    } catch (e) {
+      _errorMessage = 'Lỗi: ${e.toString().replaceAll('DioException: ', '')}';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> _completeGoogleSignIn(GoogleSignInAccount googleUser) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      return await _verifyGoogleAccount(googleUser);
+    } catch (e) {
+      _errorMessage = 'Lỗi: ${e.toString().replaceAll('DioException: ', '')}';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> _verifyGoogleAccount(GoogleSignInAccount googleUser) async {
+    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+    final String? idToken = googleAuth.idToken;
+
+    if (idToken == null || idToken.isEmpty) {
+      _errorMessage = kIsWeb
+          ? 'Không lấy được Google ID token. Vui lòng dùng nút Google chính thức và thử lại.'
+          : 'Không lấy được Google ID token. Vui lòng kiểm tra Google OAuth serverClientId.';
+      return false;
+    }
+
+    final response = await _authService.verifyGoogleToken(idToken);
+    final data = response.data;
+
+    if (data != null) {
+      final String? extractedToken = data['token'] ?? data['accessToken'] ??
+          (data['data'] is Map ? data['data']['token'] : null);
+
+      if (extractedToken != null) {
+        _token = extractedToken;
+
+        final userPayload = data['user'] ??
+            (data['data'] is Map && (data['data'] as Map).containsKey('user') ? data['data']['user'] : null) ??
+            (data['data'] is Map ? data['data'] : null) ??
+            data['profile'];
+
+        _user = userPayload is Map<String, dynamic> ? userPayload : (userPayload as Map?)?.cast<String, dynamic>();
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', _token!);
+        if (_user != null) {
+          await prefs.setString('user', jsonEncode(_user));
+        }
+
+        return true;
+      }
+
+      _errorMessage = data['message'] ?? 'Đăng nhập Google thất bại.';
+      return false;
+    }
+
+    _errorMessage = 'Không có phản hồi từ máy chủ.';
+    return false;
+  }
+
   // Tải thông tin cá nhân mới nhất (GET /customer/profile)
   Future<void> fetchLatestProfile() async {
     try {
@@ -247,6 +376,9 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _authService.logout();
     } catch (_) {}
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {}
 
     _token = null;
     _user = null;
@@ -254,5 +386,11 @@ class AuthProvider extends ChangeNotifier {
     await prefs.remove('token');
     await prefs.remove('user');
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _googleSignInSubscription?.cancel();
+    super.dispose();
   }
 }

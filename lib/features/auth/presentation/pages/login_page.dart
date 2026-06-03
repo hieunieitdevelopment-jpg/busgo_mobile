@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
+import 'package:busgo_mobile/features/auth/presentation/widgets/google_login_button.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -55,6 +56,32 @@ class _LoginPageState extends State<LoginPage> {
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text(authProvider.errorMessage ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
+    final success = await authProvider.signInWithGoogle();
+
+    if (success) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Đăng nhập Google thành công! Chào mừng quay trở lại BusGo.'),
+          backgroundColor: Color(0xff006e1c),
+        ),
+      );
+      // Redirect dynamically to HomePage
+      router.go('/');
+    } else {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(authProvider.errorMessage ?? 'Đăng nhập Google thất bại. Vui lòng thử lại.'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -446,6 +473,42 @@ class _LoginPageState extends State<LoginPage> {
                                     ],
                                   ),
                           ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Divider with "OR"
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Divider(
+                                color: Colors.grey.withOpacity(0.3),
+                                thickness: 1,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                              child: Text(
+                                'HOẶC',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Divider(
+                                color: Colors.grey.withOpacity(0.3),
+                                thickness: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        buildGoogleLoginButton(
+                          isLoading: authProvider.isLoading || !authProvider.isGoogleSignInReady,
+                          onPressed: _handleGoogleSignIn,
                         ),
                         const SizedBox(height: 24),
 
