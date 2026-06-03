@@ -2,7 +2,7 @@ name: Deploy to Firebase Hosting on Merge
 on:
   push:
     branches:
-      - main # Thay đổi thành master nếu nhánh chính của bạn là master
+      - main
 
 jobs:
   build_and_deploy:
@@ -11,28 +11,27 @@ jobs:
       # 1. Lấy mã nguồn từ GitHub
       - uses: actions/checkout@v4
 
-      # 2. Cài đặt môi trường Java (cần cho các tác vụ bổ trợ của Flutter)
+      # 2. Cài đặt môi trường Java
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. Cài đặt Flutter Action để chạy lệnh flutter
+      # 3. Cài đặt Flutter Action
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # Sử dụng kênh stable mới nhất
+          channel: 'stable'
 
       # 4. Tải các thư viện phụ thuộc của dự án
       - run: flutter pub get
 
-      # 5. Build dự án sang phiên bản Web tĩnh với bộ render CanvasKit mượt mà
-      - run: flutter build web --release --web-renderer canvaskit
+      # 5. Build dự án sang phiên bản Web tĩnh
+      - run: flutter build web --release
 
       # 6. Deploy thư mục build/web lên Firebase Hosting
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUSGO_FB8BB}}' # Giữ nguyên biến này (Firebase tự sinh ra)
-          projectId: busgo-fb8bb # Thay thế bằng Project ID thật của bạn trên Firebase (ví dụ: busgo-app-123)
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUSGO_FB8BB }}'
+          projectId: busgo-fb8bb
           channelId: live
-
