@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:busgo_mobile/core/api/public_service.dart';
+import 'package:busgo_mobile/core/api/rating_service.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
 import 'package:busgo_mobile/features/booking/data/booking_service.dart';
 import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
+import 'package:busgo_mobile/features/notifications/presentation/providers/notification_provider.dart';
+import 'package:busgo_mobile/features/rating/presentation/widgets/company_reviews_modal.dart';
 
 // Đồng bộ 100% danh sách Tỉnh/Thành phố từ Web (VIETNAM_PROVINCES)
 const List<String> _vietnamProvinces = [
@@ -29,9 +32,11 @@ class _HomePageState extends State<HomePage> {
   late final TextEditingController _dateController;
 
   final PublicService _publicService = PublicService();
+  final RatingService _ratingService = RatingService();
   List<dynamic> _promotions = [];
   List<dynamic> _companies = [];
   List<dynamic> _popularRoutes = [];
+  Map<int, CompanyRatingSummary> _companyRatings = {};
   bool _isLoadingData = false;
   String? _lastToken;
 
@@ -53,7 +58,46 @@ class _HomePageState extends State<HomePage> {
     if (authProvider.token != _lastToken) {
       _lastToken = authProvider.token;
       _fetchPublicData();
+      _refreshUnreadCount();
     }
+  }
+
+  void _refreshUnreadCount() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final notiProvider = Provider.of<NotificationProvider>(context, listen: false);
+    if (authProvider.token != null && authProvider.token!.isNotEmpty) {
+      notiProvider.fetchNotifications(silent: true);
+    } else {
+      notiProvider.clear();
+    }
+  }
+
+  /// Fetch song song avg rating cho danh sách công ty (gọi 1 lần, cache 60s).
+  Future<void> _fetchCompanyRatings() async {
+    final ids = _companies
+        .map((c) {
+          final raw = c['id'] ?? c['_id'];
+          return int.tryParse(raw?.toString() ?? '');
+        })
+        .whereType<int>()
+        .toList();
+    if (ids.isEmpty) return;
+    final summaries = await _ratingService.getSummariesParallel(
+      companyIds: ids,
+      scanLimit: 100,
+    );
+    if (!mounted) return;
+    setState(() {
+      _companyRatings = summaries;
+      // Sort _companies giảm dần theo avgRating, ưu tiên có review trước.
+      _companies.sort((a, b) {
+        final ida = int.tryParse((a['id'] ?? a['_id'] ?? '0').toString()) ?? 0;
+        final idb = int.tryParse((b['id'] ?? b['_id'] ?? '0').toString()) ?? 0;
+        final ra = summaries[ida]?.avgRating ?? 0;
+        final rb = summaries[idb]?.avgRating ?? 0;
+        return rb.compareTo(ra);
+      });
+    });
   }
 
   Future<void> _fetchPublicData() async {
@@ -68,6 +112,8 @@ class _HomePageState extends State<HomePage> {
           _promotions = promoRes.data['items'] ?? promoRes.data['promotions'] ?? promoRes.data['data'] ?? [];
           _companies = companyRes.data['companies'] ?? companyRes.data['data'] ?? [];
         });
+        // Fetch ratings song song cho 8 nhà xe đầu để giảm tải.
+        _fetchCompanyRatings();
       }
 
       // Fetch dynamic popular routes matching the React web client logic
@@ -162,6 +208,7 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         setState(() => _isLoadingData = false);
       }
+      _refreshUnreadCount();
     }
   }
 
@@ -330,15 +377,52 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                       ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.notifications_none_outlined, color: Colors.white),
-                          onPressed: () {},
-                        ),
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.notifications_none_outlined, color: Colors.white),
+                              onPressed: () {
+                                context.push('/notifications').then((_) => _refreshUnreadCount());
+                              },
+                            ),
+                          ),
+                          Consumer<NotificationProvider>(
+                            builder: (context, notiProvider, _) {
+                              final count = notiProvider.unreadCount;
+                              if (count <= 0) return const SizedBox.shrink();
+                              return Positioned(
+                                top: -2,
+                                right: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Text(
+                                    count > 99 ? '99+' : '$count',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -529,13 +613,21 @@ class _HomePageState extends State<HomePage> {
                             itemCount: _promotions.length,
                             itemBuilder: (context, index) {
                               final promo = _promotions[index];
+                              final String title = promo['title'] ?? 'Khuyến mãi hot';
+                              final String desc = promo['content'] ?? promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất';
+                              final String code = promo['code'] ?? 'BGO${promo['id'] ?? (index + 1)}';
+                              final String? imageUrl = promo['imageUrl'];
+                              final String? endDate = promo['endDate'];
                               return _buildPromoCard(
                                 context,
-                                title: promo['title'] ?? 'Khuyến mãi hot',
-                                code: promo['code'] ?? 'BUSGO',
-                                desc: promo['description'] ?? 'Ưu đãi đặt vé hấp dẫn nhất',
+                                title: title,
+                                code: code,
+                                desc: desc,
+                                imageUrl: imageUrl,
+                                endDate: endDate,
                                 color1: index % 2 == 0 ? const Color(0xffff9800) : const Color(0xff2196f3),
                                 color2: index % 2 == 0 ? const Color(0xffe65100) : const Color(0xff0d47a1),
+                                onTap: () => context.push('/promotion-detail', extra: promo),
                               );
                             },
                           )
@@ -572,20 +664,36 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 12),
                   if (_companies.isNotEmpty)
-                    ..._companies.map((company) {
+                    ..._companies.take(8).map((company) {
                       final companyName = company['name'] ?? company['company_name'] ?? 'Nhà xe đối tác';
+                      final int? cid = int.tryParse((company['id'] ?? company['_id'] ?? '').toString());
+                      final summary = cid != null ? _companyRatings[cid] : null;
+                      final ratingText = summary != null && summary.totalReviews > 0
+                          ? summary.avgRating.toStringAsFixed(1)
+                          : '0.0';
+                      final reviewsText = summary != null
+                          ? '${summary.totalReviews} đánh giá'
+                          : '0 đánh giá';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12.0),
                         child: _buildOperatorListItem(
                           context,
                           name: companyName,
-                          rating: '4.8',
-                          reviews: '320 đánh giá',
+                          logoUrl: company['logoUrl'],
+                          rating: ratingText,
+                          reviews: reviewsText,
                           features: 'Wifi • Tivi • Sạc • Nước uống',
                           onTap: () => _navigateToCompanyTrips(
                             companyName,
                             companyId: (company['id'] ?? company['_id'] ?? '').toString(),
                           ),
+                          onTapRating: cid == null
+                              ? null
+                              : () => showCompanyReviewsModal(
+                                    context,
+                                    companyId: cid,
+                                    companyName: companyName,
+                                  ),
                         ),
                       );
                     })
@@ -593,6 +701,7 @@ class _HomePageState extends State<HomePage> {
                     _buildOperatorListItem(
                       context,
                       name: 'Futa Bus Lines (Phương Trang)',
+                      logoUrl: null,
                       rating: '4.9',
                       reviews: '1,250 đánh giá',
                       features: 'Wifi • Tivi • Sạc • Nước uống',
@@ -602,6 +711,7 @@ class _HomePageState extends State<HomePage> {
                     _buildOperatorListItem(
                       context,
                       name: 'Đất Cảng Bus',
+                      logoUrl: null,
                       rating: '4.7',
                       reviews: '840 đánh giá',
                       features: 'Ghế da • Điều hòa • Nước uống',
@@ -611,6 +721,7 @@ class _HomePageState extends State<HomePage> {
                     _buildOperatorListItem(
                       context,
                       name: 'Sapa Express',
+                      logoUrl: null,
                       rating: '4.8',
                       reviews: '410 đánh giá',
                       features: 'Cabin Royal VIP • Cổng sạc Type-C',
@@ -831,22 +942,41 @@ class _HomePageState extends State<HomePage> {
     required String title,
     required String code,
     required String desc,
+    required String? imageUrl,
+    required String? endDate,
     required Color color1,
     required Color color2,
+    required VoidCallback onTap,
   }) {
-    return Container(
-      width: 250,
-      margin: const EdgeInsets.only(right: 12),
+    final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 260,
+        margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color1, color2],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
         borderRadius: BorderRadius.circular(16),
+        image: hasImage
+            ? DecorationImage(
+                image: NetworkImage(imageUrl),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.55),
+                  BlendMode.srcOver,
+                ),
+              )
+            : null,
+        gradient: hasImage
+            ? null
+            : LinearGradient(
+                colors: [color1, color2],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
         boxShadow: [
           BoxShadow(
-            color: color2.withOpacity(0.3),
+            color: (hasImage ? Colors.black26 : color2.withOpacity(0.3)),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -854,6 +984,22 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Stack(
         children: [
+          // Lớp phủ tối mịn ở dưới chữ
+          if (hasImage)
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.black.withOpacity(0.7),
+                    Colors.black.withOpacity(0.1),
+                  ],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                ),
+              ),
+            ),
+          
           // Semi-circle cutout patterns on left/right for ticket style
           Positioned(
             left: -8,
@@ -880,7 +1026,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -894,8 +1040,8 @@ class _HomePageState extends State<HomePage> {
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          letterSpacing: 0.5,
+                          fontSize: 13,
+                          letterSpacing: 0.3,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -905,7 +1051,7 @@ class _HomePageState extends State<HomePage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withOpacity(0.25),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.white30),
                       ),
@@ -922,11 +1068,11 @@ class _HomePageState extends State<HomePage> {
                 ),
                 // Dashed separator line
                 Container(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  margin: const EdgeInsets.symmetric(vertical: 4),
                   height: 1,
                   child: Row(
                     children: List.generate(
-                      14,
+                      16,
                       (index) => Expanded(
                         child: Container(
                           color: index % 2 == 0 ? Colors.transparent : Colors.white30,
@@ -936,32 +1082,58 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 ),
-                Text(
-                  desc,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      desc,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (endDate != null && endDate.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, color: Colors.white70, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Hạn dùng: $endDate',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
           ),
         ],
       ),
-    );
+    ),);
   }
 
   Widget _buildOperatorListItem(
     BuildContext context, {
     required String name,
+    required String? logoUrl,
     required String rating,
     required String reviews,
     required String features,
     required VoidCallback onTap,
+    VoidCallback? onTapRating,
   }) {
+    final bool hasLogo = logoUrl != null && logoUrl.isNotEmpty;
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -994,16 +1166,31 @@ class _HomePageState extends State<HomePage> {
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: const Color(0xff006e1c).withOpacity(0.08),
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade100),
                           ),
-                          child: const Icon(
-                            Icons.directions_bus_filled_outlined,
-                            color: Color(0xff006e1c),
-                            size: 22,
-                          ),
+                          child: hasLogo
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    logoUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.directions_bus_filled_outlined,
+                                      color: Color(0xff006e1c),
+                                      size: 22,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.directions_bus_filled_outlined,
+                                  color: Color(0xff006e1c),
+                                  size: 22,
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1044,24 +1231,39 @@ class _HomePageState extends State<HomePage> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    rating,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      color: Colors.black87,
+                              GestureDetector(
+                                onTap: onTapRating,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      rating,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        color: Colors.black87,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '($reviews)',
-                                    style: const TextStyle(color: Colors.grey, fontSize: 10),
-                                  ),
-                                ],
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '($reviews)',
+                                      style: TextStyle(
+                                        color: onTapRating != null
+                                            ? const Color(0xff006e1c)
+                                            : Colors.grey,
+                                        fontSize: 10,
+                                        fontWeight: onTapRating != null
+                                            ? FontWeight.w700
+                                            : FontWeight.normal,
+                                        decoration: onTapRating != null
+                                            ? TextDecoration.underline
+                                            : TextDecoration.none,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(

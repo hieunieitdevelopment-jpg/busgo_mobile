@@ -62,7 +62,8 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _handleGoogleSignIn() async {
+  // Xử lý đăng nhập bằng Google
+  Future<void> _handleGoogleLogin() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
@@ -72,19 +73,44 @@ class _LoginPageState extends State<LoginPage> {
     if (success) {
       scaffoldMessenger.showSnackBar(
         const SnackBar(
-          content: Text('Đăng nhập Google thành công! Chào mừng quay trở lại BusGo.'),
+          content: Text('Đăng nhập Google thành công! Chào mừng đến BusGo.'),
           backgroundColor: Color(0xff006e1c),
         ),
       );
-      // Redirect dynamically to HomePage
       router.go('/');
     } else {
+      final errorMsg = authProvider.errorMessage;
+      if (errorMsg != null && errorMsg.isNotEmpty) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  // Xử lý đăng nhập bằng Facebook
+  Future<void> _handleFacebookLogin() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
+    final success = await authProvider.signInWithFacebook();
+
+    if (success) {
       scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text(authProvider.errorMessage ?? 'Đăng nhập Google thất bại. Vui lòng thử lại.'),
-          backgroundColor: Colors.redAccent,
+        const SnackBar(
+          content: Text('Đăng nhập Facebook thành công! Chào mừng đến BusGo.'),
+          backgroundColor: Color(0xff006e1c),
         ),
       );
+      router.go('/');
+    } else {
+      final errorMsg = authProvider.errorMessage;
+      if (errorMsg != null && errorMsg.isNotEmpty) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -92,17 +118,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
-    // Auto-redirect if already authenticated to prevent entering login again
-    if (authProvider.isAuthenticated) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.go('/');
-      });
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xff006e1c)),
-        ),
-      );
-    }
+    // GoRouter redirect guard tự động chuyển user đã login về Home
 
     return Scaffold(
       backgroundColor: const Color(0xfff7f9fa),
@@ -139,13 +155,16 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Text(
-                        'BusGo',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
+                      const Flexible(
+                        child: Text(
+                          'BusGo',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -162,9 +181,12 @@ class _LoginPageState extends State<LoginPage> {
                       children: [
                         Icon(Icons.verified_user_outlined, color: Colors.amber, size: 14),
                         SizedBox(width: 4),
-                        Text(
-                          'Đặt vé nhanh, quản lý rõ ràng',
-                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                        Flexible(
+                          child: Text(
+                            'Đặt vé nhanh, quản lý rõ ràng',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -217,9 +239,12 @@ class _LoginPageState extends State<LoginPage> {
                             children: [
                               Icon(Icons.lock_outline, color: Color(0xff006e1c), size: 14),
                               SizedBox(width: 4),
-                              Text(
-                                'Đăng nhập tài khoản',
-                                style: TextStyle(color: Color(0xff006e1c), fontSize: 11, fontWeight: FontWeight.bold),
+                              Flexible(
+                                child: Text(
+                                  'Đăng nhập tài khoản',
+                                  style: TextStyle(color: Color(0xff006e1c), fontSize: 11, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),
@@ -262,24 +287,27 @@ class _LoginPageState extends State<LoginPage> {
                                           : [],
                                     ),
                                     alignment: Alignment.center,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.email_outlined,
-                                          size: 16,
-                                          color: _isEmailType ? const Color(0xff006e1c) : Colors.grey,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Email',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.email_outlined,
+                                            size: 16,
                                             color: _isEmailType ? const Color(0xff006e1c) : Colors.grey,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Email',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: _isEmailType ? const Color(0xff006e1c) : Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -296,24 +324,27 @@ class _LoginPageState extends State<LoginPage> {
                                           : [],
                                     ),
                                     alignment: Alignment.center,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.phone_android_outlined,
-                                          size: 16,
-                                          color: !_isEmailType ? const Color(0xff006e1c) : Colors.grey,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Số điện thoại',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.phone_android_outlined,
+                                            size: 16,
                                             color: !_isEmailType ? const Color(0xff006e1c) : Colors.grey,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Số điện thoại',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: !_isEmailType ? const Color(0xff006e1c) : Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -476,45 +507,63 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Divider with "OR"
+                        // ─── Divider: "Hoặc đăng nhập với" ───
                         Row(
                           children: [
-                            Expanded(
-                              child: Divider(
-                                color: Colors.grey.withOpacity(0.3),
-                                thickness: 1,
-                              ),
-                            ),
+                            Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
                               child: Text(
-                                'HOẶC',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.withOpacity(0.6),
-                                ),
+                                'Hoặc đăng nhập với',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                               ),
                             ),
-                            Expanded(
-                              child: Divider(
-                                color: Colors.grey.withOpacity(0.3),
-                                thickness: 1,
+                            Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ─── Social Login Buttons ───
+                        Column(
+                          children: [
+                            // Nút Google
+                            buildGoogleLoginButton(
+                              isLoading: authProvider.isLoading ||
+                                  authProvider.isSocialLoading ||
+                                  !authProvider.isGoogleSignInReady,
+                              onPressed: _handleGoogleLogin,
+                            ),
+                            const SizedBox(height: 12),
+                            // Nút Facebook
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                onPressed: (authProvider.isLoading || authProvider.isSocialLoading)
+                                    ? null
+                                    : () => _handleFacebookLogin(),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xff1877F2),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 0,
+                                ),
+                                icon: authProvider.isSocialLoading
+                                    ? const SizedBox.shrink()
+                                    : const Icon(Icons.facebook, size: 22),
+                                label: const Text(
+                                  'Facebook',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                                ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 20),
 
-                        buildGoogleLoginButton(
-                          isLoading: authProvider.isLoading || !authProvider.isGoogleSignInReady,
-                          onPressed: _handleGoogleSignIn,
-                        ),
-                        const SizedBox(height: 24),
-
                         // Switch to Register (Tạo tài khoản)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
                           children: [
                             const Text('Chưa có tài khoản? ', style: TextStyle(fontSize: 12, color: Colors.grey)),
                             GestureDetector(

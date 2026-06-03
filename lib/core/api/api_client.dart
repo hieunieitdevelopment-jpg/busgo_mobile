@@ -37,6 +37,7 @@ class ApiClient {
             '/auth/reset-password',
             '/auth/sign-in',
             '/auth/google/verify-token',
+            '/auth/facebook/verify-token',
             '/customer/sign-in',
             '/customer/sign-up',
           ];

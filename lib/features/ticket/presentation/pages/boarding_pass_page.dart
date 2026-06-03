@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
+import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
 
 class BoardingPassPage extends StatelessWidget {
   const BoardingPassPage({super.key});
@@ -9,40 +10,68 @@ class BoardingPassPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bookingProvider = Provider.of<BookingProvider>(context);
+    final ticketProvider = Provider.of<TicketProvider>(context);
+
+    // Ưu tiên thông tin chi tiết vé được chọn từ Lịch sử vé, nếu không có mới dùng Booking vừa tạo
+    final dynamic realTicket = ticketProvider.selectedTicket ?? bookingProvider.lastCreatedBooking;
     final schedule = bookingProvider.selectedSchedule;
-    final lastBooking = bookingProvider.lastCreatedBooking;
 
-    final String fromTo = bookingProvider.currentFrom.isNotEmpty && bookingProvider.currentTo.isNotEmpty
-        ? '${bookingProvider.currentFrom} ➔ ${bookingProvider.currentTo}'
-        : 'Hành trình của bạn';
+    final String fromTo = realTicket != null && realTicket['fromLocation'] != null && realTicket['toLocation'] != null
+        ? '${realTicket['fromLocation']} ➔ ${realTicket['toLocation']}'
+        : (bookingProvider.currentFrom.isNotEmpty && bookingProvider.currentTo.isNotEmpty
+            ? '${bookingProvider.currentFrom} ➔ ${bookingProvider.currentTo}'
+            : 'Hành trình của bạn');
 
-    final String travelDate = bookingProvider.currentDate.isNotEmpty
-        ? bookingProvider.currentDate
-        : 'Hôm nay';
+    final String travelDate = realTicket != null && realTicket['departureDate'] != null
+        ? realTicket['departureDate'].toString()
+        : (bookingProvider.currentDate.isNotEmpty ? bookingProvider.currentDate : 'Hôm nay');
 
-    final String departureTime = bookingProvider.selectedPickup != null
-        ? bookingProvider.selectedPickup['time'] ?? '08:00 AM'
-        : '08:00 AM';
+    final String departureTime = realTicket != null && realTicket['departureTime'] != null
+        ? realTicket['departureTime'].toString()
+        : (bookingProvider.selectedPickup != null ? bookingProvider.selectedPickup['time'] ?? '08:00 AM' : '08:00 AM');
 
-    final String arrivalTime = bookingProvider.selectedDropoff != null
-        ? bookingProvider.selectedDropoff['time'] ?? '02:30 PM'
-        : '02:30 PM';
+    final String arrivalTime = realTicket != null && realTicket['arrivalTime'] != null
+        ? realTicket['arrivalTime'].toString()
+        : (bookingProvider.selectedDropoff != null ? bookingProvider.selectedDropoff['time'] ?? '02:30 PM' : '02:30 PM');
 
-    final String seatsSelected = bookingProvider.selectedSeatNumbers.isNotEmpty
-        ? bookingProvider.selectedSeatNumbers.join(', ')
-        : 'Chưa chọn';
+    final String seatsSelected = realTicket != null && (realTicket['seatNumber'] != null || realTicket['seatNumbers'] != null)
+        ? (realTicket['seatNumber'] ?? realTicket['seatNumbers']).toString()
+        : (bookingProvider.selectedSeatNumbers.isNotEmpty ? bookingProvider.selectedSeatNumbers.join(', ') : 'Chưa chọn');
 
     final compObj = schedule != null ? (schedule['company'] ?? (schedule['tripSchedule'] is Map ? schedule['tripSchedule']['company'] : null)) : null;
-    final String operatorName = schedule != null
-        ? (schedule['name'] ?? 
-           schedule['companyName'] ?? 
-           schedule['company_name'] ?? 
-           (schedule['tripSchedule'] is Map ? schedule['tripSchedule']['companyName'] ?? schedule['tripSchedule']['company_name'] : null) ?? 
-           (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : null) ?? 
-           'Futa Bus Lines')
-        : 'Đối tác BusGo';
+    final String operatorName = realTicket != null && (realTicket['companyName'] ?? realTicket['operatorName']) != null
+        ? (realTicket['companyName'] ?? realTicket['operatorName']).toString()
+        : (schedule != null
+            ? (schedule['name'] ?? 
+               schedule['companyName'] ?? 
+               schedule['company_name'] ?? 
+               (schedule['tripSchedule'] is Map ? schedule['tripSchedule']['companyName'] ?? schedule['tripSchedule']['company_name'] : null) ?? 
+               (compObj is Map ? compObj['name'] ?? compObj['companyName'] ?? compObj['company_name'] : null) ?? 
+               'Futa Bus Lines')
+            : 'Đối tác BusGo');
 
-    final int bookingId = int.tryParse((lastBooking != null ? lastBooking['id'] ?? lastBooking['bookingId'] ?? '108249' : '108249').toString()) ?? 108249;
+    final int bookingId = int.tryParse((realTicket != null ? realTicket['id'] ?? realTicket['bookingId'] ?? '108249' : '108249').toString()) ?? 108249;
+
+    // Tổng tiền: ưu tiên lấy từ ticket thật (totalAmount), fallback bookingProvider.totalPrice
+    double resolvedTotal = 0;
+    if (realTicket is Map) {
+      final raw = realTicket['totalAmount'] ??
+          realTicket['total_amount'] ??
+          realTicket['amount'] ??
+          (realTicket['ticket'] is Map
+              ? realTicket['ticket']['totalAmount'] ?? realTicket['ticket']['total_amount']
+              : null);
+      if (raw is num) {
+        resolvedTotal = raw.toDouble();
+      } else if (raw != null) {
+        final clean = raw.toString().replaceAll(RegExp(r'[^0-9]'), '');
+        resolvedTotal = double.tryParse(clean) ?? 0;
+      }
+    }
+    if (resolvedTotal <= 0) {
+      resolvedTotal = bookingProvider.totalPrice;
+    }
+    final String totalAmountText = '${resolvedTotal.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}đ';
 
     return Scaffold(
       backgroundColor: const Color(0xff121212), // High-End Dark Frame
@@ -61,8 +90,14 @@ class BoardingPassPage extends StatelessWidget {
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () {
-            bookingProvider.clearSelectionAfterBooking();
-            context.go('/');
+            if (ticketProvider.selectedTicket != null) {
+              // Quay lại lịch sử vé và refresh danh sách
+              ticketProvider.fetchMyTickets();
+              context.go('/my-tickets');
+            } else {
+              bookingProvider.clearSelectionAfterBooking();
+              context.go('/');
+            }
           },
         ),
       ),
@@ -202,7 +237,7 @@ class BoardingPassPage extends StatelessWidget {
                                   const Text('Tổng tiền', style: TextStyle(color: Colors.grey, fontSize: 11)),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${bookingProvider.totalPrice.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}đ',
+                                    totalAmountText,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
                                   ),
                                 ],
@@ -210,54 +245,7 @@ class BoardingPassPage extends StatelessWidget {
                             ],
                           ),
                           
-                          // Dashed Tear-Line Representation
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20.0),
-                            child: Row(
-                              children: List.generate(
-                                20,
-                                (index) => Expanded(
-                                  child: Container(
-                                    height: 1,
-                                    color: index % 2 == 0 ? Colors.transparent : Colors.grey.shade300,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // QR Code Container
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade100),
-                            ),
-                            child: Column(
-                              children: [
-                                // Mock QR graphic lines
-                                Container(
-                                  width: 140,
-                                  height: 140,
-                                  color: Colors.white,
-                                  child: const Center(
-                                    child: Icon(Icons.qr_code_2, size: 120, color: Colors.black87),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                const Text(
-                                  'MÃ LÊN XE (BOARDING QR CODE)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5, color: Colors.black87),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Trình mã này cho lái xe để soát vé nhanh',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
+                          // (Đã bỏ phần QR code và dải nét đứt phía dưới theo yêu cầu)
                         ],
                       ),
                     ),

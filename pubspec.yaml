@@ -26,12 +26,18 @@ dependencies:
   intl: ^0.19.0
   dio: ^5.4.3
   shared_preferences: ^2.2.3
-  google_sign_in: ^6.2.0
+  url_launcher: ^6.3.1
+
+  # Social Login (Google + Facebook)
+  google_sign_in: ^6.2.2
   google_sign_in_web: ^0.12.2
   google_identity_services_web: ^0.3.0
+  flutter_facebook_auth: ^7.1.1
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^3.0.0
 

@@ -25,6 +25,21 @@ class AuthService {
     );
   }
 
+  // Gửi OTP đến email/SĐT — POST /auth/send-otp
+  // Dùng cho 2 luồng: (1) verify giá trị hiện tại, (2) gửi OTP đến giá trị mới.
+  Future<Response> sendOtp({
+    required String field, // 'email' | 'phone'
+    required String value,
+  }) async {
+    return await _apiClient.dio.post(
+      '/auth/send-otp',
+      data: {
+        'field': field,
+        'value': value,
+      },
+    );
+  }
+
   // Đăng ký tài khoản khách hàng mới (Khớp 100% với POST /customer/sign-up của Swagger)
   Future<Response> signUp({
     required String fullName,

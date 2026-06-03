@@ -2,7 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:busgo_mobile/features/booking/presentation/providers/booking_provider.dart';
+import 'package:busgo_mobile/features/ticket/presentation/providers/ticket_provider.dart';
+import 'package:busgo_mobile/features/ticket/data/cash_tickets_tracker.dart';
+import 'package:busgo_mobile/features/auth/presentation/providers/auth_provider.dart';
+import 'package:busgo_mobile/features/notifications/presentation/providers/notification_provider.dart';
 
 class BookingCheckoutPage extends StatefulWidget {
   const BookingCheckoutPage({super.key});
@@ -49,6 +54,311 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
         _timer?.cancel();
       }
     });
+  }
+
+  /// Resolve nhãn mã vé ĐỒNG BỘ với trang "Vé của tôi" (hiển thị dạng #<ticketId>).
+  /// Trang My Tickets dùng ticket['id'], không phải bookingId, nên cần resolve để khớp.
+  Future<String> _resolveTicketLabel() async {
+    if (!mounted) return '';
+    final bookingProvider =
+        Provider.of<BookingProvider>(context, listen: false);
+    final ticketProvider =
+        Provider.of<TicketProvider>(context, listen: false);
+    final dynamic lastBooking = bookingProvider.lastCreatedBooking;
+    if (lastBooking is! Map) return '';
+
+    // 1. Nếu response đặt vé đã chứa ticket id trực tiếp
+    final dynamic directTicketId =
+        lastBooking['ticket'] is Map ? lastBooking['ticket']['id'] : null;
+    if (directTicketId != null && directTicketId.toString().isNotEmpty) {
+      return '#$directTicketId';
+    }
+
+    // 2. Resolve qua bookingId -> tra cứu ticket thật để lấy đúng ticket id
+    final dynamic rawBookingId = lastBooking['bookingId'] ?? lastBooking['id'];
+    final int? bookingId = int.tryParse(rawBookingId?.toString() ?? '');
+    if (bookingId == null) return '';
+    try {
+      final ticket = await ticketProvider.findTicketByBookingId(bookingId);
+      if (ticket is Map && ticket['id'] != null) {
+        return '#${ticket['id']}';
+      }
+    } catch (_) {
+      // bỏ qua, dùng fallback bên dưới
+    }
+    return '#$bookingId';
+  }
+
+  /// Tạo thông báo cho người dùng (đặt vé / thanh toán). An toàn nếu chưa đăng nhập.
+  Future<void> _createUserNotification({
+    required String title,
+    required String body,
+    String? data,
+  }) async {
+    if (!mounted) return;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final notiProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+    final int? uid = authProvider.userId;
+    if (uid == null) return;
+    await notiProvider.pushUserNotification(
+      userId: uid,
+      title: title,
+      body: body,
+      data: data,
+    );
+  }
+
+  void _showPaymentProcessingDialog({
+    required BuildContext context,
+    required int bookingId,
+    required BookingProvider bookingProvider,
+    required TicketProvider ticketProvider,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        String statusState = 'waiting'; // 'waiting', 'checking', 'success', 'fail'
+        String checkMessage = 'Hệ thống đang chờ xác nhận thanh toán trực tuyến của bạn từ VNPAY / Stripe.\n\nSau khi bạn hoàn tất thanh toán trên tab trình duyệt vừa mở, hãy nhấn nút "Kiểm tra giao dịch" ở dưới.';
+        Timer? pollTimer;
+
+        // Cơ cơ chế tự động truy vấn mỗi 3 giây
+        void startPolling(StateSetter setState) {
+          pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+            if (statusState == 'success' || statusState == 'checking') return;
+
+            try {
+              print('=== POLLING TICKET ID: $bookingId ===');
+              final ticket = await ticketProvider.findTicketByBookingId(bookingId);
+              print('=== POLLING TICKET DATA: $ticket ===');
+              final status = ticket != null ? ticket['status']?.toString() : null;
+              final statusLower = status?.toLowerCase();
+              print('=== POLLING TICKET STATUS RESOLVED: $statusLower ===');
+
+              if (statusLower == 'reserved' || 
+                  statusLower == 'completed' || 
+                  statusLower == 'paid' || 
+                  statusLower == 'checked_in' || 
+                  statusLower == 'cash_paid') {
+                print('=== POLLING MATCHED SUCCESS STATE! CANCELING TIMER AND REDIRECTING ===');
+                timer.cancel();
+                if (dialogContext.mounted) {
+                  setState(() {
+                    statusState = 'success';
+                    checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận. Đang chuyển hướng...';
+                  });
+                }
+
+                // Thông báo: Thanh toán thành công (thanh toán trực tuyến)
+                await _createUserNotification(
+                  title: 'Thanh toán thành công',
+                  body:
+                      'Thanh toán thành công! Vé của bạn đã được xác nhận.',
+                  data: 'payment-success',
+                );
+
+                await Future.delayed(const Duration(seconds: 2));
+                if (context.mounted) {
+                  pollTimer?.cancel();
+                  Navigator.pop(dialogContext);
+                  bookingProvider.clearSelectionAfterBooking();
+                  context.push('/boarding-pass');
+                }
+              }
+            } catch (e) {
+              print('=== POLLING ERROR: $e ===');
+            }
+          });
+        }
+
+        return StatefulBuilder(
+          builder: (dialogContext, setState) {
+            // Kích hoạt tự động truy vấn ở lần dựng đầu tiên
+            if (pollTimer == null) {
+              startPolling(setState);
+            }
+
+            return Dialog(
+              backgroundColor: const Color(0xff121212),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: const BorderSide(color: Colors.white10),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (statusState == 'waiting') ...[
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xff006e1c)),
+                              strokeWidth: 4,
+                            ),
+                          ),
+                          Icon(Icons.payment_outlined, size: 36, color: Colors.green.shade400),
+                        ],
+                      ),
+                    ] else if (statusState == 'checking') ...[
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                              strokeWidth: 4,
+                            ),
+                          ),
+                          Icon(Icons.sync, size: 36, color: Colors.amber.shade400),
+                        ],
+                      ),
+                    ] else if (statusState == 'success') ...[
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: const Color(0xff006e1c).withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check_circle, size: 56, color: Color(0xff006e1c)),
+                      ),
+                    ] else ...[
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.error, size: 56, color: Colors.red),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Text(
+                      statusState == 'waiting'
+                          ? 'Đang chờ thanh toán...'
+                          : (statusState == 'checking'
+                              ? 'Đang kiểm tra...'
+                              : (statusState == 'success'
+                                  ? 'Thanh Toán Thành Công!'
+                                  : 'Giao Dịch Chưa Hoàn Tất')),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: statusState == 'success'
+                            ? Colors.green
+                            : (statusState == 'fail' ? Colors.red : Colors.white),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      checkMessage,
+                      style: const TextStyle(color: Colors.grey, fontSize: 13, height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    if (statusState == 'waiting' || statusState == 'fail') ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            setState(() {
+                              statusState = 'checking';
+                              checkMessage = 'Đang truy vấn trạng thái thanh toán từ hệ thống. Vui lòng chờ...';
+                            });
+
+                            try {
+                              final ticket = await ticketProvider.findTicketByBookingId(bookingId);
+                              final status = ticket != null ? ticket['status']?.toString() : null;
+                              final statusLower = status?.toLowerCase();
+
+                              if (statusLower == 'reserved' || 
+                                  statusLower == 'completed' || 
+                                  statusLower == 'paid' || 
+                                  statusLower == 'checked_in' || 
+                                  statusLower == 'cash_paid') {
+                                pollTimer?.cancel();
+                                setState(() {
+                                  statusState = 'success';
+                                  checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận. Đang chuyển hướng...';
+                                });
+
+                                // Thông báo: Thanh toán thành công (kiểm tra thủ công)
+                                await _createUserNotification(
+                                  title: 'Thanh toán thành công',
+                                  body:
+                                      'Thanh toán thành công! Vé của bạn đã được xác nhận.',
+                                  data: 'payment-success',
+                                );
+
+                                await Future.delayed(const Duration(seconds: 2));
+                                if (context.mounted) {
+                                  Navigator.pop(dialogContext);
+                                  bookingProvider.clearSelectionAfterBooking();
+                                  context.push('/boarding-pass');
+                                }
+                              } else {
+                                setState(() {
+                                  statusState = 'fail';
+                                  checkMessage = 'Giao dịch chưa hoàn tất hoặc đang được xử lý (Trạng thái: ${status ?? 'chưa xác định'}).\n\nVui lòng thử lại sau vài giây hoặc kiểm tra tab thanh toán.';
+                                });
+                              }
+                            } catch (e) {
+                              setState(() {
+                                statusState = 'fail';
+                                checkMessage = 'Lỗi truy vấn trạng thái: $e';
+                              });
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xff006e1c),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Kiểm tra giao dịch', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (statusState == 'checking') const SizedBox(height: 60),
+                    if (statusState != 'success' && statusState != 'checking') ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            pollTimer?.cancel();
+                            Navigator.pop(dialogContext);
+                            bookingProvider.clearSelectionAfterBooking();
+                            context.push('/my-tickets');
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white70,
+                            side: const BorderSide(color: Colors.white24),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Xem Lịch sử vé'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -402,8 +712,8 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Card Input Fields for Online Payments
-                        if (_selectedPaymentMethod == 'VNPay' || _selectedPaymentMethod == 'Card') ...[
+                        // Card Input Fields — CHỈ hiện khi chọn "Thanh toán bằng thẻ"
+                        if (_selectedPaymentMethod == 'Card') ...[
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -530,14 +840,126 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                               );
 
                               if (success && mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(_selectedPaymentMethod == 'Cash' ? 'Đặt vé thành công!' : 'Thanh toán trực tuyến thành công!'),
-                                    backgroundColor: const Color(0xff006e1c),
-                                  ),
+                                // Thông báo: Đặt vé thành công (đã giữ chỗ)
+                                final String ticketLabel =
+                                    await _resolveTicketLabel();
+                                if (!mounted) return;
+                                await _createUserNotification(
+                                  title: 'Đặt vé thành công',
+                                  body:
+                                      'Đặt vé thành công. Mã vé: $ticketLabel. Vui lòng hoàn tất thanh toán để xác nhận chuyến đi.',
+                                  data: 'booking-success',
                                 );
-                                context.push('/boarding-pass');
+
+                                if (!mounted) return;
+                                if (checkoutMethod == 'vnpay' || checkoutMethod == 'stripe') {
+                                  final String? payUrl = bookingProvider.paymentUrl;
+                                  if (payUrl != null && payUrl.isNotEmpty) {
+                                    try {
+                                      final Uri uri = Uri.parse(payUrl);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Đang mở cổng thanh toán trực tuyến bảo mật...'),
+                                          backgroundColor: Color(0xff006e1c),
+                                        ),
+                                      );
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.inAppWebView,
+                                        webViewConfiguration: const WebViewConfiguration(
+                                          enableJavaScript: true,
+                                          enableDomStorage: true,
+                                        ),
+                                      );
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Không thể mở liên kết thanh toán: $e'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Không tìm thấy link thanh toán từ hệ thống.'),
+                                        backgroundColor: Colors.amber,
+                                      ),
+                                    );
+                                  }
+
+                                  // Kích hoạt Dialog trạng thái thanh toán trực tuyến chuẩn logic của Web
+                                  final dynamic lastBookingData = bookingProvider.lastCreatedBooking;
+                                  print('=== LAST BOOKING DATA FOR RESOLUTION: $lastBookingData ===');
+                                  
+                                  // Trích xuất ticketId thực tế để polling trạng thái vé (Tránh lỗi HTTP 500 khi dùng sai Booking ID)
+                                  final rawTicketId = lastBookingData != null 
+                                      ? ((lastBookingData['ticket'] is Map ? lastBookingData['ticket']['id'] : null) ?? 
+                                         lastBookingData['id'] ?? 
+                                         lastBookingData['bookingId'])
+                                      : null;
+                                  final int? ticketIdForPolling = int.tryParse(rawTicketId?.toString() ?? '');
+                                  print('=== RESOLVED TICKET ID FOR POLLING: $ticketIdForPolling ===');
+
+                                  if (ticketIdForPolling != null) {
+                                    final ticketProvider = Provider.of<TicketProvider>(context, listen: false);
+                                    _showPaymentProcessingDialog(
+                                      context: context,
+                                      bookingId: ticketIdForPolling,
+                                      bookingProvider: bookingProvider,
+                                      ticketProvider: ticketProvider,
+                                    );
+                                  } else {
+                                    bookingProvider.clearSelectionAfterBooking();
+                                    context.push('/my-tickets');
+                                  }
+                                } else {
+                                  // Thanh toán tiền mặt: vé GIỮ CHỖ, thu tiền tại quầy/khi lên xe (vẫn ở trạng thái chờ thanh toán)
+                                  // Đánh dấu phía client: vé này thanh toán tiền mặt → coi như đã thanh toán, chỉ chờ nhà xe hoàn thành chuyến.
+                                  final lastBooking =
+                                      bookingProvider.lastCreatedBooking;
+                                  if (lastBooking is Map) {
+                                    final int? bId = int.tryParse(
+                                        (lastBooking['bookingId'] ??
+                                                lastBooking['id'] ??
+                                                '')
+                                            .toString());
+                                    final int? tId = int.tryParse(
+                                        ((lastBooking['ticket'] is Map
+                                                    ? lastBooking['ticket']
+                                                        ['id']
+                                                    : null) ??
+                                                '')
+                                            .toString());
+                                    await CashTicketsTracker().markCash(
+                                      ticketId: tId,
+                                      bookingId: bId,
+                                    );
+                                  }
+
+                                  await _createUserNotification(
+                                    title: 'Đặt vé tiền mặt thành công',
+                                    body:
+                                        'Vé của bạn đã được giữ chỗ. Vui lòng thanh toán tiền mặt tại quầy hoặc khi lên xe để hoàn tất.',
+                                    data: 'cash-reserved',
+                                  );
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Đặt vé thành công!'),
+                                      backgroundColor: Color(0xff006e1c),
+                                    ),
+                                  );
+                                  context.push('/boarding-pass');
+                                }
                               } else {
+                                // Thông báo: Giao dịch thất bại
+                                await _createUserNotification(
+                                  title: 'Giao dịch thất bại',
+                                  body:
+                                      'Giao dịch chưa hoàn tất. Vui lòng kiểm tra lại thông tin và thử lại.',
+                                  data: 'payment-failed',
+                                );
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(

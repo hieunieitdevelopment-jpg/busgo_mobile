@@ -7,10 +7,24 @@ class BookingProvider extends ChangeNotifier {
 
   double _parsePrice(dynamic schedule) {
     if (schedule == null) return 0.0;
-    final dynamic raw = schedule['price'] ?? 
-                        schedule['ticketPrice'] ?? 
-                        schedule['ticket_price'] ?? 
-                        schedule['fare'];
+    
+    dynamic raw = schedule['price'] ?? 
+                  schedule['ticketPrice'] ?? 
+                  schedule['ticket_price'] ?? 
+                  schedule['fare'] ??
+                  schedule['pricePerSeat'] ??
+                  schedule['price_per_seat'];
+                  
+    if (raw == null && schedule['tripSchedule'] is Map) {
+      final sMap = schedule['tripSchedule'] as Map;
+      raw = sMap['price'] ?? 
+            sMap['ticketPrice'] ?? 
+            sMap['ticket_price'] ?? 
+            sMap['fare'] ??
+            sMap['pricePerSeat'] ??
+            sMap['price_per_seat'];
+    }
+    
     if (raw == null) return 0.0;
     if (raw is num) return raw.toDouble();
     final String clean = raw.toString().replaceAll(RegExp('[^0-9]'), '');
@@ -48,10 +62,12 @@ class BookingProvider extends ChangeNotifier {
   bool _isLoadingSeats = false;
   bool _isLoadingStops = false;
   dynamic _lastCreatedBooking;
+  String? _paymentUrl;
   
   List<dynamic> get schedules => _schedules;
   List<dynamic> get coupons => _coupons;
   bool get isLoading => _isLoading;
+  String? get paymentUrl => _paymentUrl;
   String? get errorMessage => _errorMessage;
 
   String get currentFrom => _currentFrom;
@@ -507,6 +523,19 @@ class BookingProvider extends ChangeNotifier {
           print('=== ĐĂNG KÝ PHƯƠNG THỨC THANH TOÁN THÀNH CÔNG ===');
           print(paymentResponse.data);
 
+          _paymentUrl = null;
+          final dynamic payData = paymentResponse.data;
+          if (payData != null) {
+            if (payData is Map) {
+              _paymentUrl = payData['paymentUrl'] ?? 
+                            payData['url'] ?? 
+                            (payData['data'] is Map ? payData['data']['paymentUrl'] ?? payData['data']['url'] : null);
+            } else if (payData is String) {
+              _paymentUrl = payData;
+            }
+          }
+          print('Trích xuất paymentUrl thành công: $_paymentUrl');
+
           _isLoading = false;
           notifyListeners();
           return true;
@@ -540,6 +569,58 @@ class BookingProvider extends ChangeNotifier {
     _selectedPickup = null;
     _selectedDropoff = null;
     _tripId = null;
+    _paymentUrl = null;
     notifyListeners();
+  }
+
+  // Thanh toán cho một Booking/Vé đã có sẵn ở trạng thái Chờ thanh toán
+  Future<String?> payExistingBooking({
+    required int bookingId,
+    required String method,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final String apiMethod = method.toLowerCase();
+      print('Bắt đầu gọi API thanh toán lại: method=$apiMethod, bookingId=$bookingId');
+      
+      final paymentResponse = await _bookingService.createPaymentMethod(
+        bookingId: bookingId,
+        method: apiMethod,
+      );
+
+      print('=== ĐĂNG KÝ PHƯƠNG THỨC THANH TOÁN THÀNH CÔNG ===');
+      print(paymentResponse.data);
+
+      String? paymentUrl;
+      final dynamic payData = paymentResponse.data;
+      if (payData != null) {
+        if (payData is Map) {
+          paymentUrl = payData['paymentUrl'] ?? 
+                       payData['url'] ?? 
+                       (payData['data'] is Map ? payData['data']['paymentUrl'] ?? payData['data']['url'] : null);
+        } else if (payData is String) {
+          paymentUrl = payData;
+        }
+      }
+      
+      _isLoading = false;
+      notifyListeners();
+      return paymentUrl;
+    } catch (e) {
+      if (e is DioException) {
+        final resData = e.response?.data;
+        _errorMessage = 'Lỗi [${e.response?.statusCode}]: ${resData is Map ? (resData['message'] ?? resData['error'] ?? resData.toString()) : (resData ?? e.message)}';
+      } else {
+        _errorMessage = e.toString().replaceAll('DioException: ', '');
+      }
+      print('=== PAY EXISTING ERROR ===: $_errorMessage');
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    return null;
   }
 }
