@@ -13,7 +13,7 @@ class ApiClient {
   ApiClient._internal() {
     dio = Dio(
       BaseOptions(
-        baseUrl: 'https://my-server.serveminecraft.net',
+        baseUrl: 'https://busgo.servecounterstrike.com',
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
         headers: {
@@ -36,6 +36,8 @@ class ApiClient {
             '/auth/send-otp',
             '/auth/reset-password',
             '/auth/sign-in',
+            '/auth/google/verify-token',
+            '/auth/facebook/verify-token',
             '/customer/sign-in',
             '/customer/sign-up',
           ];

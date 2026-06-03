@@ -2,18 +2,24 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:busgo_mobile/features/auth/data/auth_service.dart';
+import 'package:busgo_mobile/features/auth/data/google_auth_service.dart';
+import 'package:busgo_mobile/features/auth/data/facebook_auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final GoogleAuthService _googleAuthService = GoogleAuthService();
+  final FacebookAuthService _facebookAuthService = FacebookAuthService();
   
   String? _token;
   Map<String, dynamic>? _user;
   bool _isLoading = false;
+  bool _isSocialLoading = false; // Loading state riêng cho social login
   String? _errorMessage;
 
   String? get token => _token;
   Map<String, dynamic>? get user => _user;
   bool get isLoading => _isLoading;
+  bool get isSocialLoading => _isSocialLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _token != null;
 
@@ -264,10 +270,138 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
-  // Luồng Đăng xuất (Logout)
+  // ============================================================
+  // ĐĂNG NHẬP BẰNG GOOGLE
+  // ============================================================
+  Future<bool> signInWithGoogle() async {
+    _isSocialLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _googleAuthService.signInWithGoogle();
+      final result = _processAuthResponse(response.data);
+
+      if (result) {
+        _isSocialLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } on String catch (code) {
+      // Xử lý error codes từ GoogleAuthService
+      _errorMessage = _socialErrorMessage(code);
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('DioException: ', '');
+    }
+
+    _isSocialLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  // ============================================================
+  // ĐĂNG NHẬP BẰNG FACEBOOK
+  // ============================================================
+  Future<bool> signInWithFacebook() async {
+    _isSocialLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _facebookAuthService.signInWithFacebook();
+      final result = _processAuthResponse(response.data);
+
+      if (result) {
+        _isSocialLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } on String catch (code) {
+      // Xử lý error codes từ FacebookAuthService
+      _errorMessage = _socialErrorMessage(code);
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('DioException: ', '');
+    }
+
+    _isSocialLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  // ============================================================
+  // HELPER: Trích xuất token + user từ response backend
+  // Dùng chung cho cả signIn, signInWithGoogle, signInWithFacebook
+  // ============================================================
+  bool _processAuthResponse(dynamic data) {
+    if (data == null) {
+      _errorMessage = 'Không có phản hồi từ máy chủ.';
+      return false;
+    }
+
+    // Trích xuất token (hỗ trợ nhiều format response từ backend)
+    final String? extractedToken = data['token'] ??
+        data['accessToken'] ??
+        (data['data'] is Map ? data['data']['token'] : null) ??
+        (data['data'] is Map ? data['data']['accessToken'] : null);
+
+    if (extractedToken == null || extractedToken.isEmpty) {
+      _errorMessage = data['message'] ?? 'Đăng nhập thất bại.';
+      return false;
+    }
+
+    _token = extractedToken;
+
+    // Trích xuất user info (hỗ trợ nhiều format)
+    final userPayload = data['user'] ??
+        (data['data'] is Map && (data['data'] as Map).containsKey('user')
+            ? data['data']['user']
+            : null) ??
+        (data['data'] is Map ? data['data'] : null) ??
+        data['profile'] ??
+        {}; // Default user rỗng nếu không tìm thấy
+
+    _user = userPayload is Map<String, dynamic>
+        ? userPayload
+        : (userPayload as Map?)?.cast<String, dynamic>() ?? {};
+
+    // Lưu trữ vào SharedPreferences
+    _persistAuth();
+    return true;
+  }
+
+  // Lưu token + user vào local storage
+  Future<void> _persistAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', _token!);
+    if (_user != null) {
+      await prefs.setString('user', jsonEncode(_user));
+    }
+  }
+
+  // Dịch error code từ social SDK sang thông báo tiếng Việt
+  String _socialErrorMessage(String code) {
+    switch (code) {
+      case 'cancelled':
+        return 'Bạn đã hủy đăng nhập.';
+      case 'no_token':
+        return 'Không nhận được token xác thực. Vui lòng thử lại.';
+      default:
+        return code;
+    }
+  }
+
+  // Luồng Đăng xuất (Logout) — bao gồm cả social SDK
   Future<void> logout() async {
     try {
       await _authService.logout();
+    } catch (_) {}
+
+    // Đăng xuất khỏi social SDKs (nếu đang dùng)
+    try {
+      await _googleAuthService.signOut();
+    } catch (_) {}
+    try {
+      await _facebookAuthService.signOut();
     } catch (_) {}
 
     _token = null;
