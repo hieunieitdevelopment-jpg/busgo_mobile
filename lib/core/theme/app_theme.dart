@@ -63,13 +63,12 @@ class AppTheme {
         ),
       ),
 
-      // Card Theme (Tonal Shift instead of lines)
-      cardTheme: CardThemeData(
+      cardTheme: const CardTheme(
         color: AppColors.surfaceContainerLowest,
         elevation: 2,
-        shadowColor: AppColors.onSurface.withOpacity(0.04),
+        shadowColor: Color(0x0a000000), // Sử dụng màu thuần để tránh runtime với const
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
       ),
 
