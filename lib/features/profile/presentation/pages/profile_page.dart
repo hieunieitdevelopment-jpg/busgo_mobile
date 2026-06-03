@@ -526,7 +526,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           onPressed: () async {
             await auth.logout();
-            if (mounted) context.go('/');
+            if (mounted) context.go('/login');
           },
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red.shade600,

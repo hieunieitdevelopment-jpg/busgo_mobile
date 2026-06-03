@@ -18,6 +18,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSocialLoading = false;
   bool _isGoogleSignInReady = !kIsWeb;
+  bool _isLoggingOut = false;
   String? _errorMessage;
 
   String? get token => _token;
@@ -44,7 +45,7 @@ class AuthProvider extends ChangeNotifier {
 
     _googleSignInSubscription = _googleSignIn.onCurrentUserChanged.listen(
       (GoogleSignInAccount? account) {
-        if (!kIsWeb || account == null || _token != null || _isSocialLoading) {
+        if (!kIsWeb || account == null || _token != null || _isSocialLoading || _isLoggingOut) {
           return;
         }
         unawaited(_completeGoogleSignIn(account));
@@ -413,8 +414,24 @@ class AuthProvider extends ChangeNotifier {
 
   // Luồng Đăng xuất (Logout) — bao gồm cả social SDK
   Future<void> logout() async {
+    final tokenToRevoke = _token;
+    _isLoggingOut = true;
+    _isLoading = false;
+    _isSocialLoading = false;
+    _token = null;
+    _user = null;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    await prefs.remove('user');
+    notifyListeners();
+
+    unawaited(_completeLogout(tokenToRevoke));
+  }
+
+  Future<void> _completeLogout(String? tokenToRevoke) async {
     try {
-      await _authService.logout();
+      await _authService.logout(token: tokenToRevoke);
     } catch (_) {}
     try {
       await _googleSignIn.disconnect();
@@ -422,13 +439,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       await _facebookAuthService.signOut();
     } catch (_) {}
-
-    _token = null;
-    _user = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    await prefs.remove('user');
-    notifyListeners();
+    _isLoggingOut = false;
   }
 
   @override

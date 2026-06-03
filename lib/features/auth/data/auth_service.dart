@@ -98,7 +98,14 @@ class AuthService {
   }
 
   // Đăng xuất tài khoản (Khớp với POST /auth/logout trên Web)
-  Future<Response> logout() async {
-    return await _apiClient.dio.post('/auth/logout');
+  Future<Response> logout({String? token}) async {
+    return await _apiClient.dio.post(
+      '/auth/logout',
+      options: token == null
+          ? null
+          : Options(headers: {
+              'Authorization': 'Bearer $token',
+            }),
+    );
   }
 }
