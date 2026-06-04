@@ -518,6 +518,7 @@ class BookingProvider extends ChangeNotifier {
           final paymentResponse = await _bookingService.createPaymentMethod(
             bookingId: bookingId,
             method: apiMethod,
+            type: apiMethod == 'stripe' ? 'checkout' : null,
           );
 
           print('=== ĐĂNG KÝ PHƯƠNG THỨC THANH TOÁN THÀNH CÔNG ===');
@@ -589,6 +590,7 @@ class BookingProvider extends ChangeNotifier {
       final paymentResponse = await _bookingService.createPaymentMethod(
         bookingId: bookingId,
         method: apiMethod,
+        type: apiMethod == 'stripe' ? 'checkout' : null,
       );
 
       print('=== ĐĂNG KÝ PHƯƠNG THỨC THANH TOÁN THÀNH CÔNG ===');

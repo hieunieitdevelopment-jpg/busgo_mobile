@@ -152,14 +152,19 @@ class BookingService {
   Future<Response> createPaymentMethod({
     required int bookingId,
     required String method, // 'vnpay', 'stripe', 'cash'
+    String? type,
   }) async {
+    final Map<String, dynamic> params = {
+      'id': bookingId,
+      'method': method,
+    };
+    if (type != null) {
+      params['type'] = type;
+    }
     return await _apiClient.dio.post(
       '/payment/method',
       data: {}, // Gửi body rỗng để tránh lỗi 500 do body-parser trên Backend crash khi thiếu body ở POST
-      queryParameters: {
-        'id': bookingId,
-        'method': method,
-      },
+      queryParameters: params,
     );
   }
 }
