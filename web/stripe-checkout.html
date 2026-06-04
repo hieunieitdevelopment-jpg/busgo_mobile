@@ -3,59 +3,198 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BusGo - Thanh toán bằng thẻ</title>
+  <title>BusGo - Thanh toán</title>
   <script src="https://js.stripe.com/v3/"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
       min-height: 100vh;
+      color: #1a1a1a;
+    }
+
+    .checkout-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Left panel - Order summary */
+    .order-panel {
+      width: 45%;
+      background: #1a1f36;
+      color: #fff;
+      padding: 48px 40px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .order-panel::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 80%;
+      height: 200%;
+      background: rgba(99, 102, 241, 0.08);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 40px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #e2e8f0;
+      font-size: 20px;
     }
 
-    .container {
+    .brand-name {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .order-summary {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+    }
+
+    .order-label {
+      font-size: 13px;
+      color: #8b8fa3;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .order-amount {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 32px;
+      letter-spacing: -1px;
+    }
+
+    .order-amount .currency {
+      font-size: 20px;
+      font-weight: 500;
+      color: #8b8fa3;
+      margin-left: 4px;
+    }
+
+    .order-details {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 24px;
+    }
+
+    .order-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .order-item:last-child {
+      border-bottom: none;
+    }
+
+    .item-icon {
+      width: 40px;
+      height: 40px;
+      background: rgba(99, 102, 241, 0.15);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    .item-info {
+      flex: 1;
+    }
+
+    .item-name {
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .item-desc {
+      font-size: 13px;
+      color: #8b8fa3;
+    }
+
+    .item-price {
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      margin-left: 16px;
+    }
+
+    .powered-by {
+      position: relative;
+      z-index: 1;
+      margin-top: auto;
+      padding-top: 32px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .powered-by svg {
+      height: 16px;
+    }
+
+    /* Right panel - Payment form */
+    .payment-panel {
+      width: 55%;
+      padding: 48px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+    }
+
+    .payment-container {
       width: 100%;
       max-width: 480px;
-      padding: 20px;
     }
 
-    .card {
-      background: rgba(30, 41, 59, 0.95);
-      border-radius: 16px;
-      padding: 32px 28px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.15);
-      backdrop-filter: blur(20px);
+    .payment-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #1a1a1a;
     }
 
-    .logo {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-
-    .logo h1 {
-      font-size: 28px;
-      font-weight: 800;
-      background: linear-gradient(135deg, #818cf8, #6366f1, #4f46e5);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: -0.5px;
-    }
-
-    .logo p {
+    .payment-subtitle {
       font-size: 14px;
-      color: #94a3b8;
-      margin-top: 4px;
-    }
-
-    .divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(99,102,241,0.3), transparent);
-      margin: 20px 0;
+      color: #6b7280;
+      margin-bottom: 28px;
     }
 
     #payment-element {
@@ -65,21 +204,19 @@
     #submit-btn {
       width: 100%;
       padding: 14px 20px;
-      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      background: #6366f1;
       color: white;
       border: none;
-      border-radius: 10px;
-      font-size: 16px;
+      border-radius: 8px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s ease;
-      letter-spacing: 0.3px;
+      transition: all 0.2s ease;
+      font-family: inherit;
     }
 
     #submit-btn:hover:not(:disabled) {
-      background: linear-gradient(135deg, #818cf8, #6366f1);
-      transform: translateY(-1px);
-      box-shadow: 0 8px 25px rgba(99,102,241,0.4);
+      background: #4f46e5;
     }
 
     #submit-btn:disabled {
@@ -89,12 +226,12 @@
 
     .spinner {
       display: inline-block;
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border: 2px solid rgba(255,255,255,0.3);
       border-radius: 50%;
       border-top-color: white;
-      animation: spin 0.8s linear infinite;
+      animation: spin 0.7s linear infinite;
       vertical-align: middle;
       margin-right: 8px;
     }
@@ -102,125 +239,224 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     #error-message {
-      color: #f87171;
+      color: #ef4444;
       font-size: 14px;
       margin-top: 12px;
       text-align: center;
       min-height: 20px;
     }
 
-    .secure-badge {
+    .secure-footer {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      margin-top: 16px;
+      margin-top: 20px;
       font-size: 12px;
-      color: #64748b;
+      color: #9ca3af;
     }
 
-    .secure-badge svg {
+    .secure-footer svg {
       width: 14px;
       height: 14px;
-      fill: #64748b;
+      fill: #9ca3af;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 14px;
+      color: #6366f1;
+      text-decoration: none;
+      margin-bottom: 24px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .back-link:hover { text-decoration: underline; }
+
+    .back-link svg {
+      width: 16px;
+      height: 16px;
+      fill: #6366f1;
     }
 
     /* Success state */
     .success-container {
       text-align: center;
-      padding: 20px 0;
+      padding: 60px 0;
       display: none;
     }
 
-    .success-container.show {
-      display: block;
-    }
+    .success-container.show { display: block; }
 
-    .success-icon {
-      width: 72px;
-      height: 72px;
+    .success-check {
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #22c55e, #16a34a);
+      background: #22c55e;
       display: flex;
       align-items: center;
       justify-content: center;
       margin: 0 auto 20px;
-      animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
-    @keyframes scaleIn {
-      from { transform: scale(0); }
-      to { transform: scale(1); }
+    @keyframes popIn {
+      from { transform: scale(0); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
     }
 
-    .success-icon svg {
-      width: 36px;
-      height: 36px;
+    .success-check svg {
+      width: 32px;
+      height: 32px;
       fill: white;
     }
 
     .success-container h2 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #22c55e;
+      font-size: 20px;
+      font-weight: 600;
+      color: #1a1a1a;
       margin-bottom: 8px;
     }
 
     .success-container p {
       font-size: 14px;
-      color: #94a3b8;
+      color: #6b7280;
       line-height: 1.6;
     }
 
+    .success-container .close-btn {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 10px 24px;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      text-decoration: none;
+    }
+
+    .success-container .close-btn:hover { background: #4f46e5; }
+
     .form-container.hide { display: none; }
 
-    /* Error page state */
+    /* Error page */
     .error-page {
       text-align: center;
-      padding: 40px 20px;
+      padding: 80px 20px;
     }
 
     .error-page h2 {
-      color: #f87171;
-      font-size: 20px;
-      margin-bottom: 12px;
+      color: #ef4444;
+      font-size: 18px;
+      margin-bottom: 8px;
     }
 
     .error-page p {
-      color: #94a3b8;
+      color: #6b7280;
       font-size: 14px;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+      .checkout-layout {
+        flex-direction: column;
+      }
+
+      .order-panel {
+        width: 100%;
+        padding: 24px 20px;
+      }
+
+      .order-amount {
+        font-size: 28px;
+      }
+
+      .payment-panel {
+        width: 100%;
+        padding: 24px 20px;
+      }
+
+      .payment-container {
+        max-width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="card">
-      <div class="logo">
-        <h1>🚌 BusGo</h1>
-        <p>Thanh toán vé xe an toàn</p>
+  <div class="checkout-layout">
+    <!-- Left: Order Summary -->
+    <div class="order-panel">
+      <div class="brand">
+        <div class="brand-icon">🚌</div>
+        <div class="brand-name">BusGo</div>
       </div>
 
-      <div id="form-container" class="form-container">
-        <div class="divider"></div>
-        <form id="payment-form">
-          <div id="payment-element"></div>
-          <div id="error-message"></div>
-          <button type="submit" id="submit-btn">
-            Thanh toán ngay
-          </button>
-        </form>
-        <div class="secure-badge">
-          <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-          <span>Thanh toán bảo mật bởi Stripe</span>
+      <div class="order-summary">
+        <div class="order-label">Tổng thanh toán</div>
+        <div class="order-amount" id="order-amount">
+          --<span class="currency">USD</span>
+        </div>
+
+        <div class="order-details">
+          <div class="order-item">
+            <div class="item-icon">🎫</div>
+            <div class="item-info">
+              <div class="item-name">Vé xe BusGo</div>
+              <div class="item-desc">Thanh toán trực tuyến</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div id="success-container" class="success-container">
-        <div class="success-icon">
-          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+      <div class="powered-by">
+        <span>Powered by</span>
+        <svg viewBox="0 0 60 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.27 4.06-.93v3.13c-1.14.8-2.85 1.33-4.81 1.33-4.22 0-6.8-2.8-6.8-7.13 0-3.96 2.36-7.18 6.15-7.18 3.67 0 6.37 2.8 6.37 6.96 0 .36-.04.85-.1 1.27zm-4.65-5.63c-.98 0-2.05.72-2.05 2.58h4.07c0-1.86-.98-2.58-2.02-2.58zM41.7 20.36V6.55h4.3l.3 1.47c1.38-1.56 3.22-1.88 4.18-1.88v4.4c-1.02-.1-2.77.14-3.77 1.07v8.75h-5zM33.84 5.04c-1.67 0-2.72-1.1-2.72-2.42 0-1.35 1.05-2.44 2.72-2.44 1.67 0 2.72 1.1 2.72 2.44 0 1.33-1.05 2.42-2.72 2.42zm-2.33 15.32V6.55h4.66v13.81h-4.66zM24.7 6.14c-2.1 0-3.48.93-4.08 1.87l-.27-1.46h-4.35v18.87l4.98-1.06.02-4.75c.72.53 1.77 1.24 3.48 1.24 3.43 0 6.57-2.76 6.57-8.95-.03-5.63-3.22-7.76-6.35-7.76zm-1.2 11.67c-1.17 0-1.83-.4-2.3-1l-.02-7.57c.5-.6 1.2-1.02 2.32-1.02 1.78 0 3.01 2 3.01 4.76 0 2.84-1.2 4.83-3.01 4.83zM13.23 1.59l-5 1.06-.02 12.64c0 2.34 1.76 4.07 4.1 4.07 1.3 0 2.25-.24 2.77-.52v-3.69c-.5.2-2.97.93-2.97-1.4V10h2.97V6.55h-2.97l.12-4.96zM4.45 10.1c-.75-.3-1.48-.5-1.48-1.01 0-.44.36-.62.97-.62 1.18 0 2.55.36 3.73 1V5.86C6.35 5.3 5.03 5.04 3.73 5.04c-3.05 0-5.08 1.6-5.08 4.26 0 2.08 1.56 3.63 3.83 4.37.9.3 1.12.5 1.12.83 0 .5-.44.7-1.05.7-1.29 0-3-.53-4.33-1.26v3.82c1.48.64 2.97.94 4.33.94 3.13 0 5.27-1.55 5.27-4.27-.02-2.25-1.53-3.64-3.37-4.33z" fill="#6772e5"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Right: Payment Form -->
+    <div class="payment-panel">
+      <div class="payment-container">
+        <a class="back-link" onclick="window.close(); return false;" href="#">
+          <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          Quay lại ứng dụng
+        </a>
+
+        <div id="form-container" class="form-container">
+          <div class="payment-title">Thanh toán đơn hàng</div>
+          <div class="payment-subtitle">Nhập thông tin thẻ để hoàn tất thanh toán</div>
+
+          <form id="payment-form">
+            <div id="payment-element"></div>
+            <div id="error-message"></div>
+            <button type="submit" id="submit-btn">
+              Thanh toán
+            </button>
+          </form>
+
+          <div class="secure-footer">
+            <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+            <span>Thanh toán bảo mật qua Stripe</span>
+          </div>
         </div>
-        <h2>Thanh toán thành công!</h2>
-        <p>Giao dịch của bạn đã được xử lý.<br>Bạn có thể đóng trang này và quay lại ứng dụng.</p>
+
+        <div id="success-container" class="success-container">
+          <div class="success-check">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+          </div>
+          <h2>Thanh toán thành công!</h2>
+          <p>Giao dịch của bạn đã được xử lý thành công.<br>Vui lòng quay lại ứng dụng để xem vé.</p>
+          <a class="close-btn" onclick="window.close(); return false;" href="#">Đóng trang này</a>
+        </div>
       </div>
     </div>
   </div>
@@ -233,42 +469,44 @@
     if (!clientSecret) {
       document.getElementById('form-container').innerHTML = `
         <div class="error-page">
-          <h2>Lỗi</h2>
-          <p>Không tìm thấy thông tin thanh toán.<br>Vui lòng quay lại ứng dụng và thử lại.</p>
+          <h2>Không tìm thấy thông tin thanh toán</h2>
+          <p>Vui lòng quay lại ứng dụng và thử lại.</p>
         </div>`;
     } else {
       const stripe = Stripe(publishableKey);
       const elements = stripe.elements({
         clientSecret: clientSecret,
         appearance: {
-          theme: 'night',
+          theme: 'stripe',
           variables: {
             colorPrimary: '#6366f1',
-            colorBackground: '#1e293b',
-            colorText: '#e2e8f0',
-            colorDanger: '#f87171',
-            fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
             borderRadius: '8px',
             spacingUnit: '4px',
           },
-          rules: {
-            '.Input': {
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(99,102,241,0.3)',
-            },
-            '.Input:focus': {
-              border: '1px solid #6366f1',
-              boxShadow: '0 0 0 2px rgba(99,102,241,0.2)',
-            },
-            '.Label': {
-              color: '#94a3b8',
-            },
-          },
         },
+        locale: 'vi',
       });
 
-      const paymentElement = elements.create('payment');
+      const paymentElement = elements.create('payment', {
+        layout: {
+          type: 'tabs',
+          defaultCollapsed: false,
+        },
+      });
       paymentElement.mount('#payment-element');
+
+      // Try to retrieve payment intent to show amount
+      stripe.retrievePaymentIntent(clientSecret).then(({paymentIntent}) => {
+        if (paymentIntent && paymentIntent.amount) {
+          const amount = (paymentIntent.amount / 100).toFixed(2);
+          const currency = (paymentIntent.currency || 'usd').toUpperCase();
+          document.getElementById('order-amount').innerHTML = 
+            `${amount}<span class="currency">${currency}</span>`;
+          document.getElementById('submit-btn').textContent = 
+            `Thanh toán ${amount} ${currency}`;
+        }
+      });
 
       const form = document.getElementById('payment-form');
       const submitBtn = document.getElementById('submit-btn');
@@ -277,7 +515,7 @@
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner"></span>Đang xử lý...';
+        submitBtn.innerHTML = '<span class="spinner"></span>Đang xử lý thanh toán...';
         errorMessage.textContent = '';
 
         const { error } = await stripe.confirmPayment({
@@ -289,20 +527,28 @@
         });
 
         if (error) {
-          errorMessage.textContent = error.message || 'Đã xảy ra lỗi khi thanh toán.';
+          errorMessage.textContent = error.message || 'Đã xảy ra lỗi. Vui lòng thử lại.';
           submitBtn.disabled = false;
-          submitBtn.innerHTML = 'Thanh toán ngay';
+          submitBtn.textContent = 'Thanh toán';
+          // Restore amount on button
+          stripe.retrievePaymentIntent(clientSecret).then(({paymentIntent}) => {
+            if (paymentIntent && paymentIntent.amount) {
+              const amount = (paymentIntent.amount / 100).toFixed(2);
+              const currency = (paymentIntent.currency || 'usd').toUpperCase();
+              submitBtn.textContent = `Thanh toán ${amount} ${currency}`;
+            }
+          });
         } else {
-          // Payment succeeded without redirect
           document.getElementById('form-container').classList.add('hide');
           document.getElementById('success-container').classList.add('show');
         }
       });
     }
 
-    // Handle return from redirect
+    // Handle redirect return
     if (params.get('result') === 'success' || params.get('redirect_status') === 'succeeded') {
-      document.getElementById('form-container').classList.add('hide');
+      const formEl = document.getElementById('form-container');
+      if (formEl) formEl.classList.add('hide');
       document.getElementById('success-container').classList.add('show');
     }
   </script>
