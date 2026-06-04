@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:busgo_mobile/features/booking/data/booking_service.dart';
@@ -531,6 +532,16 @@ class BookingProvider extends ChangeNotifier {
               _paymentUrl = payData['paymentUrl'] ?? 
                             payData['url'] ?? 
                             (payData['data'] is Map ? payData['data']['paymentUrl'] ?? payData['data']['url'] : null);
+              // Fallback: nếu backend trả về clientSecret (chưa deploy code checkout), tự tạo URL tới trang stripe-checkout.html
+              if ((_paymentUrl == null || _paymentUrl!.isEmpty) && apiMethod == 'stripe') {
+                final String? clientSecret = payData['clientSecret'] ?? 
+                    (payData['data'] is Map ? payData['data']['clientSecret'] : null);
+                if (clientSecret != null && clientSecret.isNotEmpty && kIsWeb) {
+                  final baseUri = Uri.base;
+                  _paymentUrl = '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}/stripe-checkout.html?clientSecret=${Uri.encodeComponent(clientSecret)}';
+                  print('Tạo Stripe Checkout URL từ clientSecret: $_paymentUrl');
+                }
+              }
             } else if (payData is String) {
               _paymentUrl = payData;
             }
@@ -603,6 +614,16 @@ class BookingProvider extends ChangeNotifier {
           paymentUrl = payData['paymentUrl'] ?? 
                        payData['url'] ?? 
                        (payData['data'] is Map ? payData['data']['paymentUrl'] ?? payData['data']['url'] : null);
+          // Fallback: nếu backend trả về clientSecret (chưa deploy code checkout), tự tạo URL tới trang stripe-checkout.html
+          if ((paymentUrl == null || paymentUrl.isEmpty) && apiMethod == 'stripe') {
+            final String? clientSecret = payData['clientSecret'] ?? 
+                (payData['data'] is Map ? payData['data']['clientSecret'] : null);
+            if (clientSecret != null && clientSecret.isNotEmpty && kIsWeb) {
+              final baseUri = Uri.base;
+              paymentUrl = '${baseUri.scheme}://${baseUri.host}${baseUri.hasPort ? ':${baseUri.port}' : ''}/stripe-checkout.html?clientSecret=${Uri.encodeComponent(clientSecret)}';
+              print('Tạo Stripe Checkout URL từ clientSecret: $paymentUrl');
+            }
+          }
         } else if (payData is String) {
           paymentUrl = payData;
         }
