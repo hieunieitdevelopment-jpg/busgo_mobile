@@ -854,6 +854,7 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                 if (!mounted) return;
                                 if (checkoutMethod == 'vnpay' || checkoutMethod == 'stripe') {
                                   final String? payUrl = bookingProvider.paymentUrl;
+                                  print('=== CHECKOUT PAY URL: $payUrl ===');
                                   if (payUrl != null && payUrl.isNotEmpty) {
                                     try {
                                       final Uri uri = Uri.parse(payUrl);
@@ -865,11 +866,7 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                       );
                                       await launchUrl(
                                         uri,
-                                        mode: LaunchMode.inAppWebView,
-                                        webViewConfiguration: const WebViewConfiguration(
-                                          enableJavaScript: true,
-                                          enableDomStorage: true,
-                                        ),
+                                        mode: LaunchMode.externalApplication,
                                       );
                                     } catch (e) {
                                       ScaffoldMessenger.of(context).showSnackBar(
