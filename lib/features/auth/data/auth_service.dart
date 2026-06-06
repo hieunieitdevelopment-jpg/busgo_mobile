@@ -108,4 +108,24 @@ class AuthService {
             }),
     );
   }
+
+  // Gửi email thông báo qua API (POST /auth/email/send)
+  Future<Response> sendEmail({
+    required String to,
+    required String subject,
+    required String text,
+    String template = 'default',
+    Map<String, dynamic>? params,
+  }) async {
+    return await _apiClient.dio.post(
+      '/auth/email/send',
+      data: {
+        'to': to,
+        'subject': subject,
+        'text': text,
+        'template': template,
+        'params': params ?? {},
+      },
+    );
+  }
 }

@@ -148,6 +148,20 @@ class AuthProvider extends ChangeNotifier {
           }
           _isLoading = false;
           notifyListeners();
+
+          if (email.isNotEmpty) {
+            sendEmail(
+              to: email,
+              subject: "[BusGo] Chào mừng bạn đến với ứng dụng đặt vé xe BusGo!",
+              text: "Chào ${fullName.isNotEmpty ? fullName : "bạn"},\n\nChúc mừng bạn đã đăng ký tài khoản khách hàng thành công tại BusGo!\n\nTài khoản của bạn:\n- Email đăng nhập: $email\n- Số điện thoại: $phone\n\nTừ bây giờ bạn có thể trải nghiệm các dịch vụ tiện lợi của BusGo:\n- Tìm kiếm và đặt vé xe trực tuyến nhanh chóng.\n- Chọn chỗ ngồi yêu thích.\n- Quản lý lịch trình dễ dàng.\n- Tích điểm và nhận các ưu đãi hấp dẫn.\n\nChúc bạn có những trải nghiệm tuyệt vời cùng BusGo!\n\nTrân trọng,\nĐội ngũ BusGo",
+              template: "default",
+              params: {},
+            ).catchError((err) {
+              print("Lỗi gửi email chào mừng: $err");
+              return false;
+            });
+          }
+
           return true;
         }
 
@@ -446,5 +460,28 @@ class AuthProvider extends ChangeNotifier {
   void dispose() {
     _googleSignInSubscription?.cancel();
     super.dispose();
+  }
+
+  // Gửi email thông báo qua AuthService
+  Future<bool> sendEmail({
+    required String to,
+    required String subject,
+    required String text,
+    String template = 'default',
+    Map<String, dynamic>? params,
+  }) async {
+    try {
+      await _authService.sendEmail(
+        to: to,
+        subject: subject,
+        text: text,
+        template: template,
+        params: params,
+      );
+      return true;
+    } catch (e) {
+      print('=== sendEmail error: $e ===');
+      return false;
+    }
   }
 }

@@ -109,6 +109,31 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
     );
   }
 
+  void _sendPaymentSuccessEmail(dynamic ticket) {
+    if (ticket == null) return;
+    try {
+      final authProv = Provider.of<AuthProvider>(context, listen: false);
+      final accountEmail = authProv.user?['contactInfo']?['email'] ?? authProv.user?['email'];
+      if (accountEmail != null && accountEmail.toString().isNotEmpty) {
+        final fullName = authProv.user?['fullName'] ?? 'bạn';
+        final transactionCode = ticket['code'] ?? ticket['qrCode'] ?? ticket['id']?.toString() ?? 'N/A';
+        
+        authProv.sendEmail(
+          to: accountEmail,
+          subject: '[BusGo] Xác nhận thanh toán vé xe thành công - Mã GD: $transactionCode',
+          text: 'Chào $fullName,\n\nCảm ơn bạn đã tin tưởng lựa chọn BusGo! Thanh toán cho giao dịch của bạn đã hoàn tất thành công.\n\nThông tin chi tiết:\n- Mã giao dịch: $transactionCode\n- Thời gian giao dịch: ${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year} ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}\n\nVé xe của bạn đã được ghi nhận vào hệ thống. Bạn có thể xem lại chi tiết và quản lý vé tại trang cá nhân.\n\nChúc bạn có một hành trình an toàn và thuận lợi!\n\nThân ái,\nĐội ngũ BusGo',
+          template: 'default',
+          params: {},
+        ).catchError((err) {
+          print('Lỗi gửi email xác nhận thanh toán: $err');
+          return false;
+        });
+      }
+    } catch (e) {
+      print('Lỗi trong _sendPaymentSuccessEmail: $e');
+    }
+  }
+
   void _showPaymentProcessingDialog({
     required BuildContext context,
     required int bookingId,
@@ -157,6 +182,9 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                       'Thanh toán thành công! Vé của bạn đã được xác nhận.',
                   data: 'payment-success',
                 );
+
+                // Gửi email thông báo thanh toán thành công
+                _sendPaymentSuccessEmail(ticket);
 
                 await Future.delayed(const Duration(seconds: 2));
                 if (context.mounted) {
@@ -300,6 +328,9 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                                       'Thanh toán thành công! Vé của bạn đã được xác nhận.',
                                   data: 'payment-success',
                                 );
+
+                                // Gửi email thông báo thanh toán thành công
+                                _sendPaymentSuccessEmail(ticket);
 
                                 await Future.delayed(const Duration(seconds: 2));
                                 if (context.mounted) {

@@ -144,6 +144,31 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
     }
   }
 
+  void _sendPaymentSuccessEmail(dynamic ticket) {
+    if (ticket == null) return;
+    try {
+      final authProv = Provider.of<AuthProvider>(context, listen: false);
+      final accountEmail = authProv.user?['contactInfo']?['email'] ?? authProv.user?['email'];
+      if (accountEmail != null && accountEmail.toString().isNotEmpty) {
+        final fullName = authProv.user?['fullName'] ?? 'bạn';
+        final transactionCode = ticket['code'] ?? ticket['qrCode'] ?? ticket['id']?.toString() ?? 'N/A';
+        
+        authProv.sendEmail(
+          to: accountEmail,
+          subject: '[BusGo] Xác nhận thanh toán vé xe thành công - Mã GD: $transactionCode',
+          text: 'Chào $fullName,\n\nCảm ơn bạn đã tin tưởng lựa chọn BusGo! Thanh toán cho giao dịch của bạn đã hoàn tất thành công.\n\nThông tin chi tiết:\n- Mã giao dịch: $transactionCode\n- Thời gian giao dịch: ${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year} ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}\n\nVé xe của bạn đã được ghi nhận vào hệ thống. Bạn có thể xem lại chi tiết và quản lý vé tại trang cá nhân.\n\nChúc bạn có một hành trình an toàn và thuận lợi!\n\nThân ái,\nĐội ngũ BusGo',
+          template: 'default',
+          params: {},
+        ).catchError((err) {
+          print('Lỗi gửi email xác nhận thanh toán: $err');
+          return false;
+        });
+      }
+    } catch (e) {
+      print('Lỗi trong _sendPaymentSuccessEmail: $e');
+    }
+  }
+
   // Hiển thị Dialog xử lý và Polling kết quả thanh toán trực tiếp cực kỳ Premium
   void _showPaymentProcessingDialog({
     required BuildContext context,
@@ -185,6 +210,8 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                     checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận.';
                   });
                 }
+
+                _sendPaymentSuccessEmail(ticket);
 
                 await Future.delayed(const Duration(seconds: 2));
                 if (context.mounted) {
@@ -318,6 +345,8 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                                   statusState = 'success';
                                   checkMessage = 'Thanh toán thành công! Vé của bạn đã được xác nhận.';
                                 });
+                                
+                                _sendPaymentSuccessEmail(ticket);
 
                                 await Future.delayed(const Duration(seconds: 2));
                                 if (context.mounted) {
@@ -432,6 +461,11 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                   ),
                 );
 
+                final ticket = ticketProvider.tickets.firstWhere(
+                  (t) => t['id'] == ticketId,
+                  orElse: () => null,
+                );
+
                 final success = await ticketProvider.cancelBookingTicket(ticketId);
                 
                 if (context.mounted) {
@@ -443,6 +477,47 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                         backgroundColor: Colors.green,
                       ),
                     );
+
+                    // Gửi email thông báo hủy vé thành công
+                    if (ticket != null) {
+                      final authProv = Provider.of<AuthProvider>(context, listen: false);
+                      final accountEmail = authProv.user?['contactInfo']?['email'] ?? authProv.user?['email'];
+                      if (accountEmail != null && accountEmail.toString().isNotEmpty) {
+                        final code = ticket['code'] ?? ticket['qrCode'] ?? ticket['id']?.toString() ?? 'N/A';
+                        final fromLocation = ticket['fromLocation'] ?? '';
+                        final toLocation = ticket['toLocation'] ?? '';
+                        final departureDateRaw = ticket['departureDate']?.toString();
+                        final departureTime = ticket['departureTime']?.toString() ?? '';
+                        final seatNumber = ticket['seatNumber'] ?? '';
+                        final totalAmount = ticket['totalAmount'] ?? ticket['price'] ?? 0;
+
+                        String depDate = '';
+                        if (departureDateRaw != null) {
+                          try {
+                            final parsed = DateTime.tryParse(departureDateRaw);
+                            if (parsed != null) {
+                              depDate = '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+                            } else {
+                              depDate = departureDateRaw;
+                            }
+                          } catch (_) {
+                            depDate = departureDateRaw;
+                          }
+                        }
+
+                        authProv.sendEmail(
+                          to: accountEmail,
+                          subject: '[BusGo] Xác nhận hủy vé thành công - Vé #$code',
+                          text: 'Chào bạn,\n\nChúng tôi xác nhận yêu cầu hủy vé của bạn đã được thực hiện thành công trên hệ thống BusGo.\n\nThông tin vé đã hủy:\n- Mã vé: $code\n- Hành trình: $fromLocation đi $toLocation\n- Ngày đi: $depDate\n- Giờ đi: $departureTime\n- Vị trí ghế: $seatNumber\n- Số tiền thanh toán ban đầu: ${totalAmount.toString()}đ\n\nSố tiền hoàn trả (nếu có) sẽ được xử lý theo chính sách hoàn hủy của nhà xe đối tác. Vui lòng liên hệ hotline nhà xe hoặc phản hồi email này nếu cần hỗ trợ thêm.\n\nTrân trọng,\nĐội ngũ BusGo',
+                          template: 'default',
+                          params: {},
+                        ).catchError((err) {
+                          print('Lỗi gửi email thông báo hủy vé: $err');
+                          return false;
+                        });
+                      }
+                    }
+
                     ticketProvider.fetchMyTickets();
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
